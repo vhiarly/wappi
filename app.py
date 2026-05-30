@@ -274,6 +274,18 @@ def quitar_producto_orden(numero_cliente, texto_producto):
     return False, None
 
 
+_PATRONES_NEGOCIO = {
+    "pedidos": [r"^no\s+hay\b", r"\blisto\b"],
+    "citas":   [r"mis\s+citas\s+(hoy|semana)", r"ocupado\s+hasta\b",
+                r"\bno\s+disponible\b", r"\blibre\s+\w+"],
+    "comun":   [r"^ayuda$", r"^admin\s+"],
+}
+
+def _es_comando_negocio(msg_lower, modo):
+    patrones = _PATRONES_NEGOCIO.get(modo, []) + _PATRONES_NEGOCIO["comun"]
+    return any(re.search(p, msg_lower) for p in patrones)
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     numero_cliente = request.form.get("From")
@@ -299,22 +311,25 @@ def webhook():
     if codigo_emisor:
         neg_emisor  = obtener_negocio(codigo_emisor)
         modo_emisor = neg_emisor.get("modo") if neg_emisor else "pedidos"
+        codigo_en_msg, _ = detectar_codigo(mensaje)
 
-        if mensaje_lower.strip() == "ayuda":
-            msg.body(respuesta_ayuda(modo_emisor))
+        # Si empieza con código válido o no es comando de negocio → flujo cliente
+        if not codigo_en_msg and _es_comando_negocio(mensaje_lower, modo_emisor):
+            if mensaje_lower.strip() == "ayuda":
+                msg.body(respuesta_ayuda(modo_emisor))
+                return str(resp)
+
+            if modo_emisor == "citas":
+                resultado = manejar_negocio_citas(numero_cliente, mensaje, twilio_send)
+            else:
+                resultado = manejar_negocio(numero_cliente, codigo_emisor, mensaje, twilio_send)
+
+            if resultado is None:
+                resultado = consultar_ia(codigo_emisor, modo_emisor, mensaje)
+
+            if resultado:
+                msg.body(resultado)
             return str(resp)
-
-        if modo_emisor == "citas":
-            resultado = manejar_negocio_citas(numero_cliente, mensaje, twilio_send)
-        else:
-            resultado = manejar_negocio(numero_cliente, codigo_emisor, mensaje, twilio_send)
-
-        if resultado is None:
-            resultado = consultar_ia(codigo_emisor, modo_emisor, mensaje)
-
-        if resultado:
-            msg.body(resultado)
-        return str(resp)
 
     # ── ADMIN CITAS (pin desde número nuevo o sesión activa) ──
     if re.match(r"^admin\s+", mensaje_lower) or tiene_sesion_admin_citas(numero_cliente):
