@@ -298,12 +298,6 @@ def webhook():
     resp = MessagingResponse()
     msg  = resp.message()
 
-    # ── MENSAJES DEL DUEÑO ──
-    if numero_cliente == DUEÑO:
-        if "listo" in mensaje_lower:
-            procesar_listo_dueno()
-        return str(resp)
-
     twilio_send = lambda to, body: client.messages.create(body=body, from_=TWILIO_NUMBER, to=to)
 
     # ── MENSAJES DE NEGOCIOS DEL ROUTER ──
