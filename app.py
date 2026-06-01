@@ -5,12 +5,17 @@ from flask import Flask, request, g
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
 from dotenv import load_dotenv
-from negocio_router import detectar_codigo, obtener_negocio
-from flujo_pedidos import manejar_pedido, manejar_negocio, tiene_flujo_activo, es_numero_negocio, limpiar_flujo
+from db import init_pool, execute
+from negocio_router import detectar_codigo, obtener_negocio, es_numero_negocio
+from flujo_pedidos import manejar_pedido, manejar_negocio, tiene_flujo_activo, limpiar_flujo
 from flujo_citas import manejar_cita, manejar_negocio_citas, tiene_flujo_citas, tiene_sesion_admin_citas, iniciar_recordatorios
 from asistente_ia import consultar_ia, respuesta_ayuda
 
 load_dotenv()
+init_pool()
+
+# Limpiar conversaciones huérfanas de reinicios anteriores
+execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
 
 app = Flask(__name__)
 
@@ -60,6 +65,7 @@ def detener_timer(numero_cliente):
 
 def cancelar_por_timeout(numero_cliente):
     limpiar_flujo(numero_cliente)
+    timers.pop(numero_cliente, None)
     try:
         client.messages.create(
             body=(

@@ -1,12 +1,9 @@
-import json
 import re
 import threading
 import time
 from datetime import datetime, timedelta, date
-from negocio_router import cargar_negocios, obtener_negocio
-
-_estados_citas   = {}  # numero_cliente → {codigo, estado, servicio_clave, servicio, dia, nombre_dia, hora}
-_sesiones_admin  = {}  # numero         → {codigo, expira, preguntando_numero_principal}
+from db import execute
+from negocio_router import obtener_negocio
 
 DIAS_ISO  = {0:"lunes", 1:"martes", 2:"miercoles", 3:"jueves", 4:"viernes", 5:"sabado", 6:"domingo"}
 DIAS_ES   = {"lunes":0,"martes":1,"miercoles":2,"miércoles":2,
@@ -14,24 +11,13 @@ DIAS_ES   = {"lunes":0,"martes":1,"miercoles":2,"miércoles":2,
 DIAS_DISP = {0:"Lunes",1:"Martes",2:"Miercoles",3:"Jueves",4:"Viernes",5:"Sabado",6:"Domingo"}
 
 
-# ── Persistencia ──────────────────────────────────────────────────────────────
-
-def _guardar(datos):
-    import negocio_router
-    with open("negocios.json", "w", encoding="utf-8") as f:
-        json.dump(datos, f, ensure_ascii=False, indent=2)
-    negocio_router._negocios_cache = datos
-
-
 # ── Tiempo ────────────────────────────────────────────────────────────────────
 
 def _hm(hora_str):
-    """'HH:MM' → minutos desde medianoche"""
     h, m = hora_str.split(":")
     return int(h) * 60 + int(m)
 
 def _mh(minutos):
-    """minutos → 'HH:MM'  (con wrap a medianoche)"""
     return f"{(minutos // 60) % 24:02d}:{minutos % 60:02d}"
 
 def _fmt12(hora_str):
@@ -40,7 +26,6 @@ def _fmt12(hora_str):
     return f"{h % 12 or 12}:{m:02d} {mer}"
 
 def _parsear_hora(texto):
-    """Extrae hora de texto libre: '5pm', '17:00', '5:30pm' → 'HH:MM'"""
     m = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", texto.lower())
     if m:
         h, mins = int(m.group(1)), int(m.group(2) or 0)
@@ -55,7 +40,6 @@ def _parsear_hora(texto):
     return None
 
 def _proximo(nombre_dia):
-    """Fecha del próximo día de semana por nombre (desde mañana)."""
     obj = DIAS_ES.get(nombre_dia.lower())
     if obj is None:
         return None
@@ -69,16 +53,24 @@ def _proximo(nombre_dia):
 
 # ── Disponibilidad ────────────────────────────────────────────────────────────
 
-def _bloqueada(negocio, fecha, hora_str, duracion_min):
+def _bloqueada(codigo, fecha, hora_str, duracion_min):
     t0, t1 = _hm(hora_str), _hm(hora_str) + duracion_min
-    for b in negocio.get("bloqueos", []):
-        if b.get("fecha") != fecha:
-            continue
+    fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
+
+    bloqueos = execute(
+        "SELECT desde, hasta FROM bloqueos WHERE codigo = %s AND fecha = %s",
+        (codigo, fecha_dt), fetch="all"
+    ) or []
+    for b in bloqueos:
         if _hm(b["desde"]) < t1 and _hm(b["hasta"]) > t0:
             return True
-    for c in negocio.get("citas", []):
-        if c.get("fecha") != fecha:
-            continue
+
+    citas = execute(
+        "SELECT hora, duracion_minutos FROM citas "
+        "WHERE codigo = %s AND fecha = %s AND estado = 'confirmada'",
+        (codigo, fecha_dt), fetch="all"
+    ) or []
+    for c in citas:
         ci = _hm(c["hora"])
         if ci < t1 and ci + c["duracion_minutos"] > t0:
             return True
@@ -92,20 +84,19 @@ def _horas_del_dia(negocio, fecha, duracion_min):
         return []
     ini = _hm(h_dia["inicio"])
     fin = _hm(h_dia["fin"])
-    if fin <= ini:            # cruza medianoche (ej: 12:00 → 01:00)
+    if fin <= ini:
         fin += 24 * 60
     slots = []
     t = ini
     while t + duracion_min <= fin:
         hora_str = _mh(t)
-        if not _bloqueada(negocio, fecha, hora_str, duracion_min):
+        if not _bloqueada(negocio["codigo"], fecha, hora_str, duracion_min):
             slots.append(hora_str)
         t += 30
     return slots
 
 
 def _dias_del_negocio(negocio, duracion_min):
-    """Próximos 8 días que trabaja y tienen al menos una hora libre."""
     hoy = date.today()
     dias = []
     for i in range(1, 9):
@@ -128,7 +119,6 @@ def _txt_servicios(negocio):
     lineas += ["", "Escribe el numero del servicio.", "Escribe cancelar para salir."]
     return "\n".join(lineas)
 
-
 def _txt_dias(negocio, duracion_min):
     dias = _dias_del_negocio(negocio, duracion_min)
     if not dias:
@@ -138,7 +128,6 @@ def _txt_dias(negocio, duracion_min):
         lineas.append(f"{i}. {nombre} {display}")
     lineas.append("\nEscribe el numero del dia.")
     return "\n".join(lineas)
-
 
 def _txt_horas(negocio, fecha, duracion_min):
     horas = _horas_del_dia(negocio, fecha, duracion_min)
@@ -151,70 +140,128 @@ def _txt_horas(negocio, fecha, duracion_min):
     return "\n".join(lineas)
 
 
+# ── Helpers de estado conversacional ─────────────────────────────────────────
+
+def _get_estado_cita(numero_cliente):
+    return execute(
+        "SELECT * FROM conversaciones_citas WHERE numero_cliente = %s",
+        (numero_cliente,), fetch="one"
+    )
+
+def _set_estado_cita(numero_cliente, data):
+    execute("""
+        INSERT INTO conversaciones_citas
+            (numero_cliente, codigo, estado, servicio_clave, dia, nombre_dia, hora)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (numero_cliente) DO UPDATE SET
+            codigo         = EXCLUDED.codigo,
+            estado         = EXCLUDED.estado,
+            servicio_clave = EXCLUDED.servicio_clave,
+            dia            = EXCLUDED.dia,
+            nombre_dia     = EXCLUDED.nombre_dia,
+            hora           = EXCLUDED.hora,
+            actualizado_en = NOW()
+    """, (
+        numero_cliente,
+        data["codigo"],
+        data["estado"],
+        data.get("servicio_clave"),
+        data.get("dia"),
+        data.get("nombre_dia"),
+        data.get("hora"),
+    ))
+
+def _del_estado_cita(numero_cliente):
+    execute("DELETE FROM conversaciones_citas WHERE numero_cliente = %s", (numero_cliente,))
+
+
+# ── Helpers de sesiones admin ─────────────────────────────────────────────────
+
+def _get_sesion_admin(numero):
+    return execute(
+        "SELECT * FROM sesiones_admin WHERE numero = %s AND expira > NOW()",
+        (numero,), fetch="one"
+    )
+
+def _set_sesion_admin(numero, codigo, preguntando_numero_principal=False):
+    execute("""
+        INSERT INTO sesiones_admin (numero, codigo, expira, preguntando_numero_principal)
+        VALUES (%s, %s, NOW() + INTERVAL '48 hours', %s)
+        ON CONFLICT (numero) DO UPDATE SET
+            codigo                     = EXCLUDED.codigo,
+            expira                     = EXCLUDED.expira,
+            preguntando_numero_principal = EXCLUDED.preguntando_numero_principal
+    """, (numero, codigo, preguntando_numero_principal))
+
+def _update_preguntando(numero, value):
+    execute(
+        "UPDATE sesiones_admin SET preguntando_numero_principal = %s WHERE numero = %s",
+        (value, numero)
+    )
+
+
 # ── Admin: autenticación ──────────────────────────────────────────────────────
 
 def _buscar_por_pin(mensaje):
-    """Retorna (codigo, negocio) si el mensaje es 'admin {pin}' de algún negocio de citas."""
-    datos = cargar_negocios()
-    for cod, neg in datos["negocios"].items():
-        if neg.get("modo") != "citas":
-            continue
-        if re.match(r"^admin\s+" + re.escape(neg["pin"]) + r"$", mensaje.strip(), re.IGNORECASE):
-            return cod, neg
+    rows = execute(
+        "SELECT codigo, pin FROM negocios WHERE modo = 'citas' AND activo = TRUE",
+        fetch="all"
+    ) or []
+    for n in rows:
+        if re.match(r"^admin\s+" + re.escape(n["pin"]) + r"$", mensaje.strip(), re.IGNORECASE):
+            return n["codigo"], obtener_negocio(n["codigo"])
     return None, None
 
-
 def _codigo_admin(numero):
-    """Retorna codigo si el número tiene acceso admin activo (registrado o sesión)."""
-    datos = cargar_negocios()
-    for cod, neg in datos["negocios"].items():
-        if neg.get("modo") == "citas" and neg.get("numero_negocio") == numero:
-            return cod
-    sesion = _sesiones_admin.get(numero)
-    if sesion and datetime.now() < sesion["expira"]:
-        return sesion["codigo"]
-    return None
-
+    row = execute(
+        "SELECT codigo FROM negocios WHERE numero_negocio = %s AND modo = 'citas' AND activo = TRUE",
+        (numero,), fetch="one"
+    )
+    if row:
+        return row["codigo"]
+    sesion = execute(
+        "SELECT codigo FROM sesiones_admin WHERE numero = %s AND expira > NOW()",
+        (numero,), fetch="one"
+    )
+    return sesion["codigo"] if sesion else None
 
 def tiene_sesion_admin_citas(numero):
-    """True si el número tiene una sesión admin activa (no incluye números registrados)."""
-    s = _sesiones_admin.get(numero)
-    return bool(s and datetime.now() < s["expira"])
+    return execute(
+        "SELECT 1 FROM sesiones_admin WHERE numero = %s AND expira > NOW()",
+        (numero,), fetch="one"
+    ) is not None
 
 
 # ── Recordatorios ────────────────────────────────────────────────────────────
 
 def _verificar_recordatorios(twilio_send):
-    now   = datetime.now()
-    datos = cargar_negocios()
-    modificado = False
-    for codigo, neg in datos["negocios"].items():
-        if neg.get("modo") != "citas":
-            continue
-        for cita in neg.get("citas", []):
-            if cita.get("estado") == "cancelada":
-                continue
-            if cita.get("recordatorio_enviado"):
-                continue
-            if not cita.get("agendado_en"):
-                continue
-            cita_dt    = datetime.strptime(f"{cita['fecha']} {cita['hora']}", "%Y-%m-%d %H:%M")
-            if cita_dt <= now:
-                continue
-            booking_dt = datetime.fromisoformat(cita["agendado_en"])
-            horas_hasta = (cita_dt - booking_dt).total_seconds() / 3600
-            reminder_dt = (cita_dt - timedelta(hours=3)) if horas_hasta <= 24 else (booking_dt + timedelta(hours=23))
-            if now >= reminder_dt:
-                twilio_send(
-                    cita["numero_cliente"],
-                    f"Recordatorio: tu cita de {cita['nombre_servicio']} en {neg['nombre']} "
-                    f"es hoy a las {_fmt12(cita['hora'])}."
-                )
-                cita["recordatorio_enviado"] = True
-                modificado = True
-    if modificado:
-        _guardar(datos)
+    now = datetime.now()
+    citas = execute("""
+        SELECT c.id, c.numero_cliente, c.nombre_servicio, c.fecha, c.hora,
+               c.agendado_en, n.nombre AS nombre_negocio
+        FROM citas c
+        JOIN negocios n ON c.codigo = n.codigo
+        WHERE c.estado = 'confirmada'
+          AND c.recordatorio_enviado = FALSE
+          AND c.agendado_en IS NOT NULL
+          AND (c.fecha::text || ' ' || c.hora)::timestamp > NOW()
+    """, fetch="all") or []
 
+    for cita in citas:
+        fecha_str = cita["fecha"].isoformat() if hasattr(cita["fecha"], "isoformat") else cita["fecha"]
+        cita_dt   = datetime.strptime(f"{fecha_str} {cita['hora']}", "%Y-%m-%d %H:%M")
+        booking_dt = cita["agendado_en"]
+        if not isinstance(booking_dt, datetime):
+            booking_dt = datetime.fromisoformat(str(booking_dt))
+        horas_hasta = (cita_dt - booking_dt).total_seconds() / 3600
+        reminder_dt = (cita_dt - timedelta(hours=3)) if horas_hasta <= 24 else (booking_dt + timedelta(hours=23))
+        if now >= reminder_dt:
+            twilio_send(
+                cita["numero_cliente"],
+                f"Recordatorio: tu cita de {cita['nombre_servicio']} en {cita['nombre_negocio']} "
+                f"es el {fecha_str} a las {_fmt12(cita['hora'])}."
+            )
+            execute("UPDATE citas SET recordatorio_enviado = TRUE WHERE id = %s", (cita["id"],))
 
 def iniciar_recordatorios(twilio_send):
     def _loop():
@@ -230,18 +277,18 @@ def iniciar_recordatorios(twilio_send):
 # ── Flujo cliente ─────────────────────────────────────────────────────────────
 
 def tiene_flujo_citas(numero_cliente):
-    return numero_cliente in _estados_citas
+    return execute(
+        "SELECT 1 FROM conversaciones_citas WHERE numero_cliente = %s",
+        (numero_cliente,), fetch="one"
+    ) is not None
 
 
 def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
-    """
-    Maneja el flujo completo de agendado de citas.
-    Retorna str (respuesta al cliente) o None.
-    """
     msg = mensaje.strip().lower()
 
-    if numero_cliente in _estados_citas:
-        codigo = _estados_citas[numero_cliente]["codigo"]
+    estado = _get_estado_cita(numero_cliente)
+    if estado:
+        codigo = estado["codigo"]
     elif not codigo:
         return None
 
@@ -249,21 +296,27 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
     if not negocio or negocio.get("modo") != "citas":
         return None
 
-    if numero_cliente not in _estados_citas:
-        _estados_citas[numero_cliente] = {"codigo": codigo, "estado": "inicio"}
+    if not estado:
+        estado = {"numero_cliente": numero_cliente, "codigo": codigo, "estado": "inicio",
+                  "servicio_clave": None, "dia": None, "nombre_dia": None, "hora": None}
+        _set_estado_cita(numero_cliente, estado)
 
-    estado = _estados_citas[numero_cliente]
     s = estado["estado"]
 
-    # Cancelar en cualquier momento
+    # Reconstruir servicio desde clave
+    servicio = None
+    if estado.get("servicio_clave"):
+        servicio = negocio.get("servicios", {}).get(estado["servicio_clave"])
+
     if re.search(r"\b(cancelar|cancel|salir|bye|chao)\b", msg):
-        _estados_citas.pop(numero_cliente, None)
+        _del_estado_cita(numero_cliente)
         return "Reserva cancelada. Escribe el codigo del negocio cuando quieras agendar."
 
     # ── INICIO / ESPERANDO SERVICIO ──
     if s in ("inicio", "esperando_servicio"):
         estado["estado"] = "esperando_servicio"
         if not msg:
+            _set_estado_cita(numero_cliente, estado)
             return _txt_servicios(negocio)
 
         servicios = [(c, sv) for c, sv in negocio.get("servicios", {}).items()
@@ -280,23 +333,24 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
                     break
 
         if not elegido:
+            _set_estado_cita(numero_cliente, estado)
             return _txt_servicios(negocio)
 
         clave_s, serv_s = elegido
-        estado.update({"estado": "esperando_dia", "servicio_clave": clave_s, "servicio": serv_s})
+        estado.update({"estado": "esperando_dia", "servicio_clave": clave_s})
+        _set_estado_cita(numero_cliente, estado)
 
         txt = _txt_dias(negocio, serv_s["duracion_minutos"])
         if not txt:
-            _estados_citas.pop(numero_cliente, None)
+            _del_estado_cita(numero_cliente)
             return "No hay disponibilidad en los proximos dias. Intenta mas adelante."
         return txt
 
     # ── ESPERANDO DÍA ──
-    if s == "esperando_dia":
-        serv = estado["servicio"]
-        dias = _dias_del_negocio(negocio, serv["duracion_minutos"])
+    if s == "esperando_dia" and servicio:
+        dias = _dias_del_negocio(negocio, servicio["duracion_minutos"])
         if not dias:
-            _estados_citas.pop(numero_cliente, None)
+            _del_estado_cita(numero_cliente)
             return "No hay disponibilidad en los proximos dias. Intenta mas adelante."
 
         elegido = None
@@ -311,22 +365,23 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
                     break
 
         if not elegido:
-            return _txt_dias(negocio, serv["duracion_minutos"])
+            return _txt_dias(negocio, servicio["duracion_minutos"])
 
         fecha, nombre_dia, _ = elegido
         estado.update({"estado": "esperando_hora", "dia": fecha, "nombre_dia": nombre_dia})
+        _set_estado_cita(numero_cliente, estado)
 
-        txt = _txt_horas(negocio, fecha, serv["duracion_minutos"])
+        txt = _txt_horas(negocio, fecha, servicio["duracion_minutos"])
         if not txt:
             estado["estado"] = "esperando_dia"
-            return f"No hay horas disponibles el {nombre_dia}. Elige otro dia.\n\n" + _txt_dias(negocio, serv["duracion_minutos"])
+            _set_estado_cita(numero_cliente, estado)
+            return f"No hay horas disponibles el {nombre_dia}. Elige otro dia.\n\n" + _txt_dias(negocio, servicio["duracion_minutos"])
         return txt
 
     # ── ESPERANDO HORA ──
-    if s == "esperando_hora":
-        serv  = estado["servicio"]
+    if s == "esperando_hora" and servicio:
         fecha = estado["dia"]
-        horas = _horas_del_dia(negocio, fecha, serv["duracion_minutos"])
+        horas = _horas_del_dia(negocio, fecha, servicio["duracion_minutos"])
 
         elegida = None
         if msg.isdigit():
@@ -340,53 +395,49 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
                     break
 
         if not elegida:
-            return _txt_horas(negocio, fecha, serv["duracion_minutos"])
+            return _txt_horas(negocio, fecha, servicio["duracion_minutos"])
 
         estado.update({"estado": "confirmando", "hora": elegida})
+        _set_estado_cita(numero_cliente, estado)
+
         r  = "Resumen de tu cita:\n\n"
         r += f"Negocio:  {negocio['nombre']}\n"
-        r += f"Servicio: {serv['nombre']}\n"
-        r += f"Duracion: {serv['duracion_minutos']} min\n"
-        r += f"Precio:   ${serv['precio']} pesos\n"
+        r += f"Servicio: {servicio['nombre']}\n"
+        r += f"Duracion: {servicio['duracion_minutos']} min\n"
+        r += f"Precio:   ${servicio['precio']} pesos\n"
         r += f"Dia:      {estado['nombre_dia']}\n"
         r += f"Hora:     {_fmt12(elegida)}\n"
         r += "\nEscribe si para confirmar o cancelar para salir."
         return r
 
     # ── CONFIRMANDO ──
-    if s == "confirmando":
+    if s == "confirmando" and servicio:
         if not re.search(r"\b(si|sí|confirmar|confirma|dale|ok|listo)\b", msg):
-            serv = estado["servicio"]
-            return (f"Servicio: {serv['nombre']} — {_fmt12(estado['hora'])} el {estado['nombre_dia']}\n\n"
+            return (f"Servicio: {servicio['nombre']} — {_fmt12(estado['hora'])} el {estado['nombre_dia']}\n\n"
                     "Escribe si para confirmar o cancelar para salir.")
 
-        serv  = estado["servicio"]
-        cita  = {
-            "numero_cliente":       numero_cliente,
-            "servicio":             estado["servicio_clave"],
-            "nombre_servicio":      serv["nombre"],
-            "fecha":                estado["dia"],
-            "hora":                 estado["hora"],
-            "duracion_minutos":     serv["duracion_minutos"],
-            "agendado_en":          datetime.now().isoformat(timespec="seconds"),
-            "recordatorio_enviado": False,
-            "estado":               "activa",
-        }
-        datos = cargar_negocios()
-        datos["negocios"][codigo]["citas"].append(cita)
-        _guardar(datos)
+        fecha_dt = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
+        execute("""
+            INSERT INTO citas
+                (codigo, numero_cliente, servicio, nombre_servicio, fecha, hora,
+                 duracion_minutos, estado, agendado_en, recordatorio_enviado)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'confirmada', NOW(), FALSE)
+        """, (
+            codigo, numero_cliente, estado["servicio_clave"], servicio["nombre"],
+            fecha_dt, estado["hora"], servicio["duracion_minutos"],
+        ))
 
         twilio_send(
             negocio["numero_negocio"],
             f"NUEVA CITA\n\n"
-            f"Servicio: {serv['nombre']}\n"
+            f"Servicio: {servicio['nombre']}\n"
             f"Dia:      {estado['nombre_dia']} — {_fmt12(estado['hora'])}\n"
             f"Cliente:  {numero_cliente}"
         )
 
-        _estados_citas.pop(numero_cliente, None)
+        _del_estado_cita(numero_cliente)
         return (f"Cita confirmada!\n\n"
-                f"Servicio: {serv['nombre']}\n"
+                f"Servicio: {servicio['nombre']}\n"
                 f"Dia:      {estado['nombre_dia']}\n"
                 f"Hora:     {_fmt12(estado['hora'])}\n\n"
                 f"Te esperamos en {negocio['nombre']}.")
@@ -397,36 +448,24 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
 # ── Flujo negocio ─────────────────────────────────────────────────────────────
 
 def manejar_negocio_citas(numero, mensaje, twilio_send):
-    """
-    Maneja mensajes del negocio o de admin con pin.
-    Retorna str (respuesta) o None.
-    """
-    msg      = mensaje.strip()
-    msg_low  = msg.lower()
+    msg     = mensaje.strip()
+    msg_low = msg.lower()
 
-    # ── Pin desde número nuevo ──
     codigo_pin, neg_pin = _buscar_por_pin(msg)
     codigo_activo = _codigo_admin(numero)
 
     if not codigo_activo and codigo_pin:
-        _sesiones_admin[numero] = {
-            "codigo":  codigo_pin,
-            "expira":  datetime.now() + timedelta(hours=48),
-            "preguntando_numero_principal": True,
-        }
+        _set_sesion_admin(numero, codigo_pin, preguntando_numero_principal=True)
         return (f"Acceso concedido a {neg_pin['nombre']}.\n"
                 f"Tu sesion dura 48 horas.\n\n"
                 f"Quieres hacer este numero el principal del negocio?\n"
                 f"Responde si o no.")
 
-    # ── Respuesta a pregunta de número principal ──
-    sesion = _sesiones_admin.get(numero, {})
-    if sesion.get("preguntando_numero_principal") and codigo_activo:
-        sesion["preguntando_numero_principal"] = False
+    sesion = _get_sesion_admin(numero)
+    if sesion and sesion.get("preguntando_numero_principal") and codigo_activo:
+        _update_preguntando(numero, False)
         if re.search(r"\b(si|sí)\b", msg_low):
-            datos = cargar_negocios()
-            datos["negocios"][codigo_activo]["numero_negocio"] = numero
-            _guardar(datos)
+            execute("UPDATE negocios SET numero_negocio = %s WHERE codigo = %s", (numero, codigo_activo))
             return "Listo. Este numero es ahora el numero principal del negocio."
         return "OK. Puedes usar los comandos de agenda normalmente."
 
@@ -435,34 +474,38 @@ def manejar_negocio_citas(numero, mensaje, twilio_send):
 
     codigo  = codigo_activo
     negocio = obtener_negocio(codigo)
-    hoy     = date.today().isoformat()
+    hoy     = date.today()
 
     # ── mis citas hoy ──
     if re.search(r"mis\s+citas\s+hoy", msg_low):
-        citas = sorted(
-            [c for c in negocio.get("citas", []) if c["fecha"] == hoy],
-            key=lambda c: c["hora"]
-        )
+        citas = execute(
+            "SELECT hora, nombre_servicio, numero_cliente FROM citas "
+            "WHERE codigo = %s AND fecha = %s AND estado = 'confirmada' ORDER BY hora",
+            (codigo, hoy), fetch="all"
+        ) or []
         if not citas:
             return "No hay citas para hoy."
-        lineas = [f"Citas de hoy:\n"]
+        lineas = ["Citas de hoy:\n"]
         for c in citas:
             lineas.append(f"• {_fmt12(c['hora'])} — {c['nombre_servicio']} ({c['numero_cliente']})")
         return "\n".join(lineas)
 
     # ── mis citas semana ──
     if re.search(r"mis\s+citas\s+semana", msg_low):
-        hoy_dt = date.today()
-        fechas = {(hoy_dt + timedelta(days=i)).isoformat() for i in range(7)}
-        citas  = sorted(
-            [c for c in negocio.get("citas", []) if c["fecha"] in fechas],
-            key=lambda c: (c["fecha"], c["hora"])
-        )
+        fechas = [(hoy + timedelta(days=i)) for i in range(7)]
+        fecha_min, fecha_max = fechas[0], fechas[-1]
+        citas = execute(
+            "SELECT fecha, hora, nombre_servicio, numero_cliente FROM citas "
+            "WHERE codigo = %s AND fecha BETWEEN %s AND %s AND estado = 'confirmada' "
+            "ORDER BY fecha, hora",
+            (codigo, fecha_min, fecha_max), fetch="all"
+        ) or []
         if not citas:
             return "No hay citas esta semana."
         lineas = ["Citas de la semana:\n"]
         for c in citas:
-            lineas.append(f"• {c['fecha']} {_fmt12(c['hora'])} — {c['nombre_servicio']} ({c['numero_cliente']})")
+            fecha_str = c["fecha"].isoformat() if hasattr(c["fecha"], "isoformat") else c["fecha"]
+            lineas.append(f"• {fecha_str} {_fmt12(c['hora'])} — {c['nombre_servicio']} ({c['numero_cliente']})")
         return "\n".join(lineas)
 
     # ── ocupado hasta HH:MM ──
@@ -473,79 +516,77 @@ def manejar_negocio_citas(numero, mensaje, twilio_send):
         ahora = datetime.now().strftime("%H:%M")
         if _hm(hasta) <= _hm(ahora):
             return "Esa hora ya paso. Hasta que hora quieres bloquear?"
-        datos = cargar_negocios()
-        datos["negocios"][codigo]["bloqueos"].append(
-            {"fecha": hoy, "desde": ahora, "hasta": hasta}
+        execute(
+            "INSERT INTO bloqueos (codigo, fecha, desde, hasta) VALUES (%s, %s, %s, %s)",
+            (codigo, hoy, ahora, hasta)
         )
-        _guardar(datos)
         return f"Agenda bloqueada desde ahora hasta las {_fmt12(hasta)}."
 
     # ── no disponible (resto del día) ──
     if re.search(r"\bno\s+disponible\b", msg_low):
         ahora = datetime.now().strftime("%H:%M")
-        datos = cargar_negocios()
-        datos["negocios"][codigo]["bloqueos"].append(
-            {"fecha": hoy, "desde": ahora, "hasta": "23:59"}
+        execute(
+            "INSERT INTO bloqueos (codigo, fecha, desde, hasta) VALUES (%s, %s, %s, %s)",
+            (codigo, hoy, ahora, "23:59")
         )
-        _guardar(datos)
         return "Agenda bloqueada por el resto del dia."
 
-    # ── libre [dia] → bloquear ese día ──
+    # ── libre [dia] ──
     m = re.search(r"libre\s+(\w+)", msg_low)
     if m:
         nombre_dia = m.group(1)
         fecha_bloqueo = _proximo(nombre_dia)
         if not fecha_bloqueo:
             return f"No reconoci el dia '{nombre_dia}'."
-        datos = cargar_negocios()
-        datos["negocios"][codigo]["bloqueos"].append(
-            {"fecha": fecha_bloqueo, "desde": "00:00", "hasta": "23:59"}
+        fecha_dt = datetime.strptime(fecha_bloqueo, "%Y-%m-%d").date()
+        execute(
+            "INSERT INTO bloqueos (codigo, fecha, desde, hasta) VALUES (%s, %s, %s, %s)",
+            (codigo, fecha_dt, "00:00", "23:59")
         )
-        _guardar(datos)
         return f"{nombre_dia.capitalize()} {fecha_bloqueo} bloqueado completamente."
 
     # ── cancelar cita [numero_cliente] ──
     m_num = re.match(r"cancelar\s+cita\s+(\S+)", msg_low)
-    # ── cancelar [fecha] [hora] ──
     m_fh  = re.match(r"cancelar\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})", msg_low)
 
     if m_num or m_fh:
-        datos  = cargar_negocios()
-        citas  = datos["negocios"][codigo].get("citas", [])
         target = None
 
         if m_num:
             buscado = m_num.group(1)
             if not buscado.startswith("whatsapp:"):
                 buscado = f"whatsapp:{buscado}"
-            candidatas = [
-                c for c in citas
-                if c["numero_cliente"] == buscado
-                and c.get("estado", "activa") == "activa"
-                and c["fecha"] >= date.today().isoformat()
-            ]
-            if candidatas:
-                target = min(candidatas, key=lambda c: (c["fecha"], c["hora"]))
+            target = execute("""
+                SELECT id, numero_cliente, nombre_servicio, fecha, hora
+                FROM citas
+                WHERE codigo = %s AND numero_cliente = %s AND estado = 'confirmada'
+                  AND fecha >= %s
+                ORDER BY fecha, hora
+                LIMIT 1
+            """, (codigo, buscado, hoy), fetch="one")
         else:
             fecha_b = m_fh.group(1)
             hora_b  = f"{int(m_fh.group(2).split(':')[0]):02d}:{m_fh.group(2).split(':')[1]}"
-            for c in citas:
-                if c["fecha"] == fecha_b and c["hora"] == hora_b and c.get("estado", "activa") == "activa":
-                    target = c
-                    break
+            fecha_dt = datetime.strptime(fecha_b, "%Y-%m-%d").date()
+            target = execute("""
+                SELECT id, numero_cliente, nombre_servicio, fecha, hora
+                FROM citas
+                WHERE codigo = %s AND fecha = %s AND hora = %s AND estado = 'confirmada'
+                LIMIT 1
+            """, (codigo, fecha_dt, hora_b), fetch="one")
 
         if not target:
             return "No encontre una cita activa con esos datos."
 
-        target["estado"] = "cancelada"
-        _guardar(datos)
+        execute("UPDATE citas SET estado = 'cancelada' WHERE id = %s", (target["id"],))
 
-        cita_dt = datetime.strptime(f"{target['fecha']} {target['hora']}", "%Y-%m-%d %H:%M")
+        fecha_str = target["fecha"].isoformat() if hasattr(target["fecha"], "isoformat") else target["fecha"]
+        cita_dt = datetime.strptime(f"{fecha_str} {target['hora']}", "%Y-%m-%d %H:%M")
         if cita_dt > datetime.now():
             twilio_send(
                 target["numero_cliente"],
                 f"Tu cita de {target['nombre_servicio']} en {negocio['nombre']} "
-                f"el {target['fecha']} a las {_fmt12(target['hora'])} fue cancelada.\n\n"
+                f"el {fecha_str} a las {_fmt12(target['hora'])} fue cancelada.\n\n"
                 f"Escribe {codigo} si quieres agendar una nueva cita."
             )
         return f"Cita de {target['numero_cliente']} cancelada."

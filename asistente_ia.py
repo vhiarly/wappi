@@ -1,10 +1,9 @@
-import json
 import os
 from datetime import date
 
 import anthropic
 
-from negocio_router import cargar_negocios
+from db import execute
 
 _COMANDOS = {
     "pedidos": (
@@ -28,30 +27,19 @@ def respuesta_ayuda(modo):
     return f"Comandos disponibles:\n\n{cmds}\n\nEscribe ayuda en cualquier momento para ver esto de nuevo."
 
 
-def _guardar(datos):
-    import negocio_router
-    with open("negocios.json", "w", encoding="utf-8") as f:
-        json.dump(datos, f, ensure_ascii=False, indent=2)
-    negocio_router._negocios_cache = datos
-
-
 def consultar_ia(codigo, modo, mensaje):
-    datos = cargar_negocios()
-    negocio = datos["negocios"].get(codigo)
-    if not negocio:
-        return None
-
     mes_actual = date.today().strftime("%Y-%m")
-    ci = negocio.get("consultas_ia", {})
-    if ci.get("mes") != mes_actual:
-        ci = {"mes": mes_actual, "count": 0}
 
-    if ci["count"] >= _LIMITE_MENSUAL:
+    row = execute("""
+        INSERT INTO consultas_ia (codigo, mes, count) VALUES (%s, %s, 1)
+        ON CONFLICT (codigo, mes) DO UPDATE
+            SET count = consultas_ia.count + 1
+            WHERE consultas_ia.count < %s
+        RETURNING count
+    """, (codigo, mes_actual, _LIMITE_MENSUAL), fetch="one")
+
+    if not row:
         return "Has usado tus consultas de ayuda este mes. Escribe ayuda para ver los comandos disponibles."
-
-    ci["count"] += 1
-    negocio["consultas_ia"] = ci
-    _guardar(datos)
 
     cmds = _COMANDOS.get(modo, _COMANDOS["pedidos"])
     try:
