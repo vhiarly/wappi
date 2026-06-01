@@ -63,9 +63,10 @@ def _parsear_productos(mensaje, catalogo):
 
 
 def _fmt(item):
+    pref = f" ({item['rebanado_pref']})" if item.get("rebanado_pref") else ""
     if item["unidad"] == "libra":
-        return f"• {item['texto']} de {item['nombre']} - ${item['precio']:.0f} pesos"
-    return f"• {item['texto']}x {item['nombre']} - ${item['precio']:.0f} pesos"
+        return f"• {item['texto']} de {item['nombre']}{pref} - ${item['precio']:.0f} pesos"
+    return f"• {item['texto']}x {item['nombre']}{pref} - ${item['precio']:.0f} pesos"
 
 
 def _menu(negocio):
@@ -220,12 +221,27 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
                 return "Ese producto está agotado ahorita. Escribe *menú* para ver lo que tenemos."
             return "No encontre ese producto. Escribe *menú* para ver lo que tenemos."
 
+        cola_rebanado = []
         for clave, prod, cantidad, texto in disponibles:
-            estado["items"].append({
+            item = {
                 "clave": clave, "nombre": prod["nombre"],
                 "cantidad": cantidad, "texto": texto,
                 "unidad": prod["unidad"], "precio": prod["precio"] * cantidad,
-            })
+            }
+            if prod.get("rebanado"):
+                cola_rebanado.append(item)
+            else:
+                estado["items"].append(item)
+
+        if cola_rebanado:
+            primero = cola_rebanado.pop(0)
+            estado["item_pendiente_rebanado"] = primero
+            estado["cola_rebanado"] = cola_rebanado
+            estado["rebanado_origen"] = "pidiendo"
+            estado["estado"] = "esperando_rebanado"
+            return (f"¿Cómo quieres el {primero['nombre']}?\n\n"
+                    "• Escribe *rebanado*\n"
+                    "• Escribe *en pieza*")
 
         respuesta = _resumen(estado["items"], "\nEscribe mas productos o *confirmar* para pedir.")
         if agotados:
@@ -295,6 +311,41 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
         return ("*Tu pedido esta pendiente.*\n\n"
                 "Escribe *ajustar* para modificarlo o *cancelar* para cancelarlo.")
 
+    # ── ESPERANDO REBANADO ──
+    if s == "esperando_rebanado":
+        item = estado["item_pendiente_rebanado"]
+        nombre = item["nombre"]
+
+        if any(p in msg for p in ["rebanado", "rebana", "rebanada"]):
+            item["rebanado_pref"] = "rebanado"
+        elif any(p in msg for p in ["pieza", "entero", "entera", "sin rebanar"]):
+            item["rebanado_pref"] = "en pieza"
+        else:
+            return (f"¿Cómo quieres el {nombre}?\n\n"
+                    "• Escribe *rebanado*\n"
+                    "• Escribe *en pieza*\n"
+                    "• Escribe *cancelar* para cancelar el pedido")
+
+        estado["items"].append(item)
+        cola = estado.get("cola_rebanado", [])
+
+        if cola:
+            siguiente = cola.pop(0)
+            estado["item_pendiente_rebanado"] = siguiente
+            estado["cola_rebanado"] = cola
+            return (f"¿Cómo quieres el {siguiente['nombre']}?\n\n"
+                    "• Escribe *rebanado*\n"
+                    "• Escribe *en pieza*")
+
+        estado.pop("item_pendiente_rebanado", None)
+        estado.pop("cola_rebanado", None)
+        origen = estado.pop("rebanado_origen", "pidiendo")
+        estado["estado"] = origen
+
+        if origen == "ajustando":
+            return _resumen(estado["items"], "\nSigue ajustando o escribe *listo* para confirmar.")
+        return _resumen(estado["items"], "\nEscribe mas productos o *confirmar* para pedir.")
+
     # ── ESPERANDO DECISION (producto no disponible) ──
     if s == "esperando_decision":
         item = estado.get("item_sin_stock", {})
@@ -359,13 +410,30 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
 
         disponibles, agotados = _parsear_productos(mensaje, negocio.get("catalogo", {}))
         if disponibles:
+            cola_rebanado = []
             for clave, prod, cantidad, texto in disponibles:
-                estado["items"].append({
+                item = {
                     "clave": clave, "nombre": prod["nombre"],
                     "cantidad": cantidad, "texto": texto,
                     "unidad": prod["unidad"], "precio": prod["precio"] * cantidad,
-                })
+                }
+                if prod.get("rebanado"):
+                    cola_rebanado.append(item)
+                else:
+                    estado["items"].append(item)
+
+            if cola_rebanado:
+                primero = cola_rebanado.pop(0)
+                estado["item_pendiente_rebanado"] = primero
+                estado["cola_rebanado"] = cola_rebanado
+                estado["rebanado_origen"] = "ajustando"
+                estado["estado"] = "esperando_rebanado"
+                return (f"¿Cómo quieres el {primero['nombre']}?\n\n"
+                        "• Escribe *rebanado*\n"
+                        "• Escribe *en pieza*")
+
             return _resumen(estado["items"], "\nSigue ajustando o escribe *listo* para confirmar.")
+
         if agotados:
             return "Ese producto está agotado ahorita. Escribe *menú* para ver lo que tenemos."
 
