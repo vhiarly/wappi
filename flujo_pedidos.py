@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from psycopg2.extras import Json
 from db import execute
 from negocio_router import obtener_negocio
@@ -124,11 +125,18 @@ def _get_cola(codigo):
     return [r["numero_cliente"] for r in rows] if rows else []
 
 def _siguiente_turno(codigo):
+    hoy = date.today()
     row = execute("""
-        INSERT INTO contadores_turnos (codigo, contador) VALUES (%s, 1)
-        ON CONFLICT (codigo) DO UPDATE SET contador = contadores_turnos.contador + 1
+        INSERT INTO contadores_turnos (codigo, fecha, contador) VALUES (%s, %s, 1)
+        ON CONFLICT (codigo) DO UPDATE SET
+            contador = CASE
+                WHEN contadores_turnos.fecha = EXCLUDED.fecha
+                THEN contadores_turnos.contador + 1
+                ELSE 1
+            END,
+            fecha = EXCLUDED.fecha
         RETURNING contador
-    """, (codigo,), fetch="one")
+    """, (codigo, hoy), fetch="one")
     return row["contador"]
 
 def _guardar_pedido(numero_cliente, codigo, items, total, turno, direccion, referencia):
@@ -328,12 +336,12 @@ def _notificar_posiciones(codigo, twilio_send):
     cola = _get_cola(codigo)
     for i, cliente in enumerate(cola[1:], start=1):
         s = "s" if i > 1 else ""
-        twilio_send(cliente, f"Hay {i} pedido{s} antes que el tuyo. Te avisamos cuando sea tu turno.")
+        twilio_send(cliente, f"Avanzaste! Hay {i} puesto{s} antes que el tuyo.")
 
 
 def _enviar_pedido_a_negocio(numero_negocio, numero_cliente, pedido, twilio_send, prefijo="NUEVO PEDIDO"):
-    turno = pedido.get("turno", "?")
-    txt  = f"{prefijo} — Turno #T-{turno} de {numero_cliente}\n\n"
+    puesto = pedido.get("turno", "?")
+    txt  = f"{prefijo} — Puesto #P-{puesto} de {numero_cliente}\n\n"
     txt += "\n".join(_fmt(i) for i in pedido.get("items", []))
     txt += f"\n\nTotal: ${pedido.get('total', 0):.0f} pesos"
     txt += f"\nDireccion: {pedido.get('direccion', '')}"
@@ -688,10 +696,10 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
     if s == "esperando_referencia":
         estado["referencia"] = "Sin referencia" if msg in ("1", "ninguna") else mensaje
         total = sum(i["precio"] for i in items)
-        turno = _siguiente_turno(codigo)
+        puesto = _siguiente_turno(codigo)
 
         _guardar_pedido(
-            numero_cliente, codigo, items, total, turno,
+            numero_cliente, codigo, items, total, puesto,
             estado["direccion"], estado["referencia"]
         )
         estado["estado"] = "pedido_enviado"
@@ -704,17 +712,19 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
             pedido = _get_pedido(numero_cliente)
             _enviar_pedido_a_negocio(negocio["numero_negocio"], numero_cliente, pedido, twilio_send)
 
-        r  = f"Pedido enviado a {negocio['nombre']}! Turno *#T-{turno}*\n\n"
+        antes = posicion - 1
+        if antes == 0:
+            pos_txt = f"✅ Pedido confirmado. Tu puesto es P-{puesto} — eres el primero!"
+        else:
+            s = "s" if antes > 1 else ""
+            pos_txt = f"✅ Pedido confirmado. Tu puesto es P-{puesto} — hay {antes} persona{s} antes que tí."
+
+        r  = pos_txt + "\n\n"
         r += "Tu pedido:\n"
         r += "\n".join(_fmt(i) for i in items)
         r += f"\n\nTotal: ${total:.0f} pesos"
         r += f"\nDireccion: {estado['direccion']}"
         r += f"\nReferencia: {estado['referencia']}"
-        if posicion == 1:
-            r += "\n\n*Tu pedido está siendo preparado.*"
-        else:
-            s_plural = "s" if posicion - 1 > 1 else ""
-            r += f"\n\nHay {posicion - 1} pedido{s_plural} antes que el tuyo. Te avisamos cuando sea tu turno."
         r += "\n\n1. Ajustar pedido\n2. Cancelar"
         return r
 
@@ -924,7 +934,7 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, twilio_send):
             return "El pedido actual tiene un producto pendiente de decisión del cliente. Espera su respuesta."
 
         pedido_actual = _get_pedido(cliente_actual)
-        turno_actual = pedido_actual.get("turno", "?") if pedido_actual else "?"
+        puesto_actual = pedido_actual.get("turno", "?") if pedido_actual else "?"
 
         twilio_send(cliente_actual, "🛵 Tu pedido está en camino!")
         execute(
@@ -935,15 +945,15 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, twilio_send):
 
         cola_actual = _get_cola(codigo_negocio)
         if not cola_actual:
-            return "✅ Listo! No hay más pedidos por ahora."
+            return "✅ No hay más pedidos por ahora."
 
         siguiente = cola_actual[0]
         pedido_sig = _get_pedido(siguiente)
         _enviar_pedido_a_negocio(numero_negocio, siguiente, pedido_sig, twilio_send, prefijo="SIGUIENTE PEDIDO")
-        twilio_send(siguiente, "Tu pedido está siendo preparado, sale en unos minutos!")
+        twilio_send(siguiente, "🛵 Tu pedido está siendo preparado")
         _notificar_posiciones(codigo_negocio, twilio_send)
 
-        turno_sig = pedido_sig.get("turno", "?") if pedido_sig else "?"
-        return f"Turno #T-{turno_actual} despachado. Enviando turno #T-{turno_sig} al siguiente."
+        puesto_sig = pedido_sig.get("turno", "?") if pedido_sig else "?"
+        return f"✅ Puesto #P-{puesto_actual} despachado. Enviando #P-{puesto_sig} al siguiente."
 
     return None

@@ -282,6 +282,11 @@ def migrate():
                 ON CONFLICT (codigo, mes) DO NOTHING
             """, (codigo, ci["mes"], ci["count"]))
 
+    cur.execute("""
+        ALTER TABLE contadores_turnos
+          ADD COLUMN IF NOT EXISTS fecha DATE DEFAULT CURRENT_DATE
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
