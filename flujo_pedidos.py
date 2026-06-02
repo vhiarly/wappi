@@ -79,7 +79,7 @@ def _set_estado(numero_cliente, data):
             (numero_cliente, codigo, estado, items, direccion, referencia,
              item_pendiente_rebanado, cola_rebanado, rebanado_origen,
              item_sin_stock, timeout_en)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW() + INTERVAL '5 minutes')
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW() + INTERVAL '3 minutes')
         ON CONFLICT (numero_cliente) DO UPDATE SET
             codigo                  = EXCLUDED.codigo,
             estado                  = EXCLUDED.estado,
@@ -104,6 +104,7 @@ def _set_estado(numero_cliente, data):
         data.get("rebanado_origen"),
         Json(data["item_sin_stock"])          if data.get("item_sin_stock")          is not None else None,
     ))
+
 
 def _del_estado(numero_cliente):
     execute("DELETE FROM conversaciones_pedidos WHERE numero_cliente = %s", (numero_cliente,))
@@ -306,6 +307,20 @@ def _parsear_productos(mensaje, catalogo):
     return disponibles, agotados
 
 
+def _productos_por_numero(msg, catalogo):
+    if not re.match(r'^\d+(?:[,\s]+\d+)*$', msg.strip()):
+        return None
+    nums = [int(n) for n in re.split(r'[,\s]+', msg.strip()) if n]
+    activos = [(k, p) for k, p in catalogo.items()
+               if p.get("activo", True) and p.get("cantidad", 1) > 0]
+    result = []
+    for n in nums:
+        if 1 <= n <= len(activos):
+            clave, prod = activos[n - 1]
+            result.append((clave, prod, 1, "1"))
+    return result or None
+
+
 def _fmt(item):
     pref = f" ({item['rebanado_pref']})" if item.get("rebanado_pref") else ""
     if item["unidad"] == "libra":
@@ -317,7 +332,7 @@ def _menu(negocio):
     lineas = [f"Bienvenido a {negocio['nombre']}!\n\nNuestros productos:\n"]
     for idx, (clave, prod) in enumerate(_catalogo_activo(negocio.get("catalogo", {})), 1):
         suf = "/libra" if prod["unidad"] == "libra" else ""
-        lineas.append(f"{idx}. {prod['nombre']} - ${prod['precio']} pesos{suf}")
+        lineas.append(f"{idx}. {prod['nombre']} - ${prod['precio']:.0f} pesos{suf}")
     lineas += ["", "Escribe el *número* del producto o su nombre.", "0. Cancelar"]
     return "\n".join(lineas)
 
@@ -511,14 +526,19 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
                 lineas = []
                 for _, prod, _, _ in disponibles:
                     suf = "/libra" if prod["unidad"] == "libra" else ""
-                    lineas.append(f"Si tenemos {prod['nombre']} - ${prod['precio']} pesos{suf}")
+                    lineas.append(f"Si tenemos {prod['nombre']} - ${prod['precio']:.0f} pesos{suf}")
                 for nombre_ag in agotados:
                     lineas.append(f"Agotado: {nombre_ag}")
                 return "\n".join(lineas) + "\n\n" + _menu(negocio)
             return _menu(negocio)
 
-        # Texto libre
-        disponibles, agotados = _parsear_productos(mensaje, negocio.get("catalogo", {}))
+        # Selección múltiple por número ("1,2,3" o "1 2 3")
+        num_seleccion = _productos_por_numero(msg, negocio.get("catalogo", {}))
+        if num_seleccion is not None:
+            disponibles, agotados = num_seleccion, []
+        else:
+            # Texto libre
+            disponibles, agotados = _parsear_productos(mensaje, negocio.get("catalogo", {}))
 
         if not disponibles:
             if agotados:

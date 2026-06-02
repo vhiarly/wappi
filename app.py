@@ -41,7 +41,7 @@ def twilio_send(to, body):
 timers           = {}
 _clientes_vistos = set()
 
-TIMEOUT_SEGUNDOS = 300
+TIMEOUT_SEGUNDOS = 180
 
 _PATRONES_NEGOCIO = {
     "pedidos": [r"^no\s+hay\b", r"\blisto\b"],
@@ -69,8 +69,8 @@ def cancelar_por_timeout(numero_cliente):
     try:
         client.messages.create(
             body=(
-                "Tu conversación expiró por inactividad.\n\n"
-                "Escribe el código del negocio cuando quieras continuar."
+                "Tu sesión expiró por inactividad. Escribe *Hola* si quieres comunicarte con "
+                "Wasapeame o el código del negocio para empezar de nuevo."
             ),
             from_=TWILIO_NUMBER,
             to=numero_cliente
