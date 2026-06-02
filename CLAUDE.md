@@ -15,7 +15,7 @@ Antes de escribir cualquier código:
 
 **Contexto del proyecto a tener en cuenta:**
 - El bot maneja conversaciones de WhatsApp con estado por número de teléfono
-- Los usuarios son dueños de colmados y sus clientes en Santo Domingo
+- Los usuarios son dueños de negocios locales y sus clientes en Santo Domingo
 - Twilio envía webhooks POST al endpoint `/webhook`
 - El estado de conversación vive en memoria (diccionario Python por ahora)
 
@@ -46,7 +46,7 @@ Antes de escribir cualquier código:
 **Archivos críticos — no tocar sin pedirlo explícitamente:**
 - La lógica de parsing de mensajes (cantidades, fracciones, rebanado)
 - El sistema de timeout de conversaciones (5 minutos)
-- El flujo de notificación al dueño del colmado
+- El flujo de notificación al dueño del negocio
 - Las credenciales y variables de entorno
 
 ---
