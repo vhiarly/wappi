@@ -9,6 +9,53 @@ _CANCELAR  = {"cancelar", "cancel", "salir", "exit", "bye", "chao", "nada", "olv
 
 _CONSULTA_PATTERNS = [r"\bhay\b", r"\bahi\b", r"\bay\b", r"\btienen\b", r"\btienes\b"]
 
+_ALIAS = {
+    "presidente": "presidente", "presidentes": "presidente",
+    "presiden": "presidente",   "presi": "presidente",
+    "heineken": "heineken",     "heini": "heineken", "heines": "heineken",
+    "agua": "agua",             "agüita": "agua",    "aguita": "agua",
+    "refresco": "refresco",     "refrescos": "refresco",
+    "coca": "refresco",         "cocacola": "refresco", "coca cola": "refresco",
+    "jugo": "jugo",             "jugos": "jugo",     "tampico": "jugo",
+    "salami": "salami",         "salamis": "salami", "salame": "salami",
+    "queso bola": "queso bola", "queso de bola": "queso bola",
+    "queso amarillo": "queso amarillo", "queso": "queso amarillo",
+    "jamon": "jamon pierna",    "jamón": "jamon pierna",
+    "jamon pierna": "jamon pierna",     "jamon pavo": "jamon pavo",
+    "jamón pavo": "jamon pavo",
+    "mortadela": "mortadela",   "mortadelas": "mortadela", "mortade": "mortadela",
+    "longaniza": "longaniza",   "longanizas": "longaniza", "longani": "longaniza",
+    "arroz": "arroz",
+    "habichuelas": "habichuelas", "habichuela": "habichuelas",
+    "frijoles": "habichuelas",    "frijol": "habichuelas",
+    "azucar": "azucar",           "azúcar": "azucar",
+    "cafe": "cafe",    "café": "cafe",    "sandino": "cafe",
+    "cafe granel": "cafe granel", "café granel": "cafe granel",
+    "aceite": "aceite",           "iberia": "aceite",
+    "huevo": "huevo",             "huevos": "huevo",
+    "pan": "pan",      "panes": "pan",    "pan de agua": "pan",
+    "platano": "platano",  "plátano": "platano",
+    "platanos": "platano", "plátanos": "platano", "guineo": "platano",
+    "leche": "leche",      "lechita": "leche",
+    "mantequilla": "mantequilla", "mante": "mantequilla",
+    "cigarrillo": "cigarrillo",   "cigarrillos": "cigarrillo",
+    "cigarro": "cigarrillo",      "cigarros": "cigarrillo", "fuma": "cigarrillo",
+    "maiz": "maiz",    "maíz": "maiz",
+    "cebolla": "cebolla", "cebollas": "cebolla",
+    "papa": "papa",    "papas": "papa",   "patata": "papa",
+}
+
+_PALABRAS_IGNORAR = {
+    "dame", "quiero", "necesito", "ponme", "mandame", "mándame",
+    "tráeme", "traeme", "deme", "déme", "una", "uno", "un",
+    "por favor", "porfavor", "fa", "xfavor",
+    "de", "unidad", "unidades",
+    "dos", "tres", "cuatro", "cinco", "seis",
+    "siete", "ocho", "nueve", "diez",
+    "un cuarto", "tres cuartos",
+    "y", "con", "mas", "más", "también", "tambien",
+}
+
 
 def _norm(t):
     t = t.lower().strip()
@@ -170,6 +217,12 @@ def _detectar_aclaracion_necesaria(mensaje, catalogo):
 
 # ── Utilidades de formato ─────────────────────────────────────────────────────
 
+def _strip_stopwords(msg):
+    for w in sorted(_PALABRAS_IGNORAR, key=len, reverse=True):
+        msg = re.sub(r'\b' + re.escape(w) + r'\b', ' ', msg)
+    return re.sub(r'\s+', ' ', msg).strip()
+
+
 def _extraer_cantidad(msg, nombre_norm, unidad):
     if unidad == "libra":
         FRACCIONES = [
@@ -206,19 +259,42 @@ def _extraer_cantidad(msg, nombre_norm, unidad):
 
 def _parsear_productos(mensaje, catalogo):
     msg = _norm(mensaje)
+    msg_limpio = _strip_stopwords(msg)
     disponibles = []
     agotados = []
+    encontrados = set()
+
+    # Pasada 1: coincidencia directa por nombre o clave
     for clave, prod in catalogo.items():
         if not prod.get("activo", True):
             continue
         nombre_norm = _norm(prod["nombre"])
         if nombre_norm not in msg and clave not in msg:
             continue
+        encontrados.add(clave)
         if prod.get("cantidad", 1) <= 0:
             agotados.append(prod["nombre"])
             continue
         cantidad, texto = _extraer_cantidad(msg, nombre_norm, prod["unidad"])
         disponibles.append((clave, prod, cantidad, texto))
+
+    # Pasada 2: alias dominicanos
+    for alias, clave_canonical in _ALIAS.items():
+        if alias not in msg_limpio:
+            continue
+        if clave_canonical in encontrados:
+            continue
+        prod = catalogo.get(clave_canonical)
+        if not prod or not prod.get("activo", True):
+            continue
+        encontrados.add(clave_canonical)
+        if prod.get("cantidad", 1) <= 0:
+            agotados.append(prod["nombre"])
+            continue
+        nombre_norm = _norm(prod["nombre"])
+        cantidad, texto = _extraer_cantidad(msg_limpio, nombre_norm, prod["unidad"])
+        disponibles.append((clave_canonical, prod, cantidad, texto))
+
     return disponibles, agotados
 
 
