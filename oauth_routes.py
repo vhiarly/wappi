@@ -7,7 +7,7 @@ from google_calendar import get_auth_url, handle_oauth_callback
 
 oauth_bp = Blueprint("oauth", __name__)
 
-@oauth_bp.route("/oauth/google/<codigo>")
+@oauth_bp.route("/google/<codigo>")
 def iniciar_oauth(codigo):
     """
     El dueño del negocio visita esta URL (se la mandas por WhatsApp una sola vez).
@@ -15,7 +15,7 @@ def iniciar_oauth(codigo):
     """
     return redirect(get_auth_url(codigo))
 
-@oauth_bp.route("/oauth/callback")
+@oauth_bp.route("/callback")
 def oauth_callback():
     """
     Google redirige aquí con ?code=...&state=negocio_id
