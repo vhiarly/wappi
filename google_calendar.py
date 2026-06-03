@@ -154,59 +154,76 @@ def get_valid_credentials(negocio_id: int) -> Credentials:
 
     return creds
 
-# ── 3 & 4. Crear evento con Google Meet ──────────────────────────────────────
+# ── 3 & 4. Crear evento (presencial o virtual con Meet) ───────────────────────
 
 def crear_cita_con_meet(
     negocio_id: int,
-    titulo: str,
+    nombre_cliente: str,
+    servicio: str,
     inicio: datetime,
     duracion_minutos: int,
+    numero_whatsapp: str,
+    es_virtual: bool = False,
     email_cliente: str | None = None,
-    descripcion: str = "",
-) -> str:
+) -> str | None:
     """
-    Crea el evento en Google Calendar con enlace de Meet.
-    Devuelve el hangoutLink listo para enviar por WhatsApp.
+    Crea el evento en Google Calendar.
+    es_virtual=True  → agrega Meet, devuelve hangoutLink.
+    es_virtual=False → evento normal sin Meet, devuelve None.
     """
     creds   = get_valid_credentials(negocio_id)
     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
     fin = inicio + timedelta(minutes=duracion_minutos)
 
+    descripcion = (
+        f"Cliente: {nombre_cliente}\n"
+        f"Servicio: {servicio}\n"
+        f"WhatsApp: {numero_whatsapp}\n"
+        f"Duración: {duracion_minutos} min"
+    )
+
+    recordatorios = (
+        [{"method": "popup", "minutes": 60}, {"method": "popup", "minutes": 10}]
+        if es_virtual else
+        [{"method": "popup", "minutes": 1440}, {"method": "popup", "minutes": 120}]
+    )
+
     evento = {
-        "summary":     titulo,
+        "summary":     f"{servicio} — {nombre_cliente}",
         "description": descripcion,
         "start": {"dateTime": inicio.isoformat(), "timeZone": "America/Santo_Domingo"},
         "end":   {"dateTime": fin.isoformat(),    "timeZone": "America/Santo_Domingo"},
-        "conferenceData": {
+        "reminders": {"useDefault": False, "overrides": recordatorios},
+    }
+
+    if es_virtual:
+        evento["conferenceData"] = {
             "createRequest": {
                 "requestId": str(uuid.uuid4()),
                 "conferenceSolutionKey": {"type": "hangoutsMeet"},
             }
-        },
-        "reminders": {
-            "useDefault": False,
-            "overrides": [
-                {"method": "popup", "minutes": 60},
-                {"method": "popup", "minutes": 10},
-            ],
-        },
-    }
+        }
 
     if email_cliente:
         evento["attendees"] = [{"email": email_cliente}]
 
-    resultado = service.events().insert(
+    insert_kwargs = dict(
         calendarId="primary",
         body=evento,
-        conferenceDataVersion=1,        # OBLIGATORIO para crear el Meet
         sendUpdates="all" if email_cliente else "none",
-    ).execute()
+    )
+    if es_virtual:
+        insert_kwargs["conferenceDataVersion"] = 1
+
+    resultado = service.events().insert(**insert_kwargs).execute()
+
+    if not es_virtual:
+        return None
 
     hangout_link = resultado.get("hangoutLink")
     if not hangout_link:
         raise RuntimeError("Google no devolvió hangoutLink. Verifica permisos del calendar.")
-
     return hangout_link
 
 # ── Helper: mensaje WhatsApp listo para Twilio ────────────────────────────────
