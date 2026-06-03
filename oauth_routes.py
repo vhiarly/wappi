@@ -35,3 +35,28 @@ def oauth_callback():
         ), 200
     except Exception as e:
         return f"Error al conectar Google Calendar: {e}", 500
+
+
+@oauth_bp.route("/crear-test-interno")
+def crear_test_interno():
+    try:
+        from db import get_db_connection  # O como sea que importes tu conexión en db.py
+        
+        # Intentamos hacer la inserción directa con SQL puro
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+            INSERT INTO negocios (codigo, nombre, telefono, estado) 
+            VALUES ('TEST', 'Negocio de Citas Prueba', '8095551234', 'activo')
+            ON CONFLICT (codigo) DO NOTHING;
+        """
+        cursor.execute(query)
+        conn.commit()
+        
+        cursor.close()
+        conn.close()
+        
+        return "✅ Comercio TEST creado exitosamente en producción.", 200
+    except Exception as e:
+        return f"❌ Error al crear el comercio: {str(e)}", 500
