@@ -46,7 +46,7 @@ SCOPES = [
 def get_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
-def get_google_tokens(negocio_id: int) -> dict | None:
+def get_google_tokens(codigo: str) -> dict | None:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -54,13 +54,13 @@ def get_google_tokens(negocio_id: int) -> dict | None:
                    google_refresh_token AS refresh_token,
                    google_token_expires  AS expires_at
             FROM   negocios
-            WHERE  id = %s
+            WHERE  codigo = %s
             """,
-            (negocio_id,),
+            (codigo,),
         )
         return cur.fetchone()
 
-def save_google_tokens(negocio_id: int, access_token: str, refresh_token: str, expires_at: datetime):
+def save_google_tokens(codigo: str, access_token: str, refresh_token: str, expires_at: datetime):
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -68,9 +68,9 @@ def save_google_tokens(negocio_id: int, access_token: str, refresh_token: str, e
             SET    google_access_token  = %s,
                    google_refresh_token = %s,
                    google_token_expires  = %s
-            WHERE  id = %s
+            WHERE  codigo = %s
             """,
-            (access_token, refresh_token, expires_at, negocio_id),
+            (access_token, refresh_token, expires_at, codigo),
         )
         conn.commit()
 
@@ -81,23 +81,23 @@ def save_google_tokens(negocio_id: int, access_token: str, refresh_token: str, e
 _AUTH_URI  = "https://accounts.google.com/o/oauth2/auth"
 _TOKEN_URI = "https://oauth2.googleapis.com/token"
 
-def get_auth_url(negocio_id: int) -> str:
+def get_auth_url(codigo: str) -> str:
     """Construye la URL de autorización de Google manualmente, sin PKCE."""
     params = urllib.parse.urlencode({
-        "client_id":             GOOGLE_CLIENT_ID,
-        "redirect_uri":          GOOGLE_REDIRECT_URI,
-        "response_type":         "code",
-        "scope":                 " ".join(SCOPES),
-        "access_type":           "offline",
-        "prompt":                "consent",
+        "client_id":              GOOGLE_CLIENT_ID,
+        "redirect_uri":           GOOGLE_REDIRECT_URI,
+        "response_type":          "code",
+        "scope":                  " ".join(SCOPES),
+        "access_type":            "offline",
+        "prompt":                 "consent",
         "include_granted_scopes": "true",
-        "state":                 str(negocio_id),
+        "state":                  codigo,
     })
     return f"{_AUTH_URI}?{params}"
 
-def handle_oauth_callback(code: str, state: str) -> int:
+def handle_oauth_callback(code: str, state: str) -> str:
     """Intercambia el code por tokens vía POST directo. Sin Flow, sin PKCE."""
-    negocio_id = int(state)
+    codigo = state  # state es el codigo del negocio (ej: "SE1")
 
     resp = http_requests.post(_TOKEN_URI, data={
         "code":          code,
@@ -115,23 +115,23 @@ def handle_oauth_callback(code: str, state: str) -> int:
     expires_at    = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
     save_google_tokens(
-        negocio_id=negocio_id,
+        codigo=codigo,
         access_token=access_token,
         refresh_token=refresh_token,
         expires_at=expires_at,
     )
-    return negocio_id
+    return codigo
 
 # ── 2. Auto-refresh del token ─────────────────────────────────────────────────
 
-def get_valid_credentials(negocio_id: int) -> Credentials:
+def get_valid_credentials(codigo: str) -> Credentials:
     """
     Devuelve Credentials válidas.
     Si el token venció (o vence en < 5 min) lo refresca y actualiza la DB.
     """
-    row = get_google_tokens(negocio_id)
+    row = get_google_tokens(codigo)
     if not row or not row["refresh_token"]:
-        raise ValueError(f"Negocio {negocio_id} no tiene Google Calendar conectado.")
+        raise ValueError(f"Negocio {codigo} no tiene Google Calendar conectado.")
 
     creds = Credentials(
         token=row["access_token"],
@@ -149,7 +149,7 @@ def get_valid_credentials(negocio_id: int) -> Credentials:
     if not creds.valid or (expires_at - datetime.now(timezone.utc)) < timedelta(minutes=5):
         creds.refresh(Request())
         save_google_tokens(
-            negocio_id,
+            codigo,
             creds.token,
             creds.refresh_token,
             datetime.now(timezone.utc) + timedelta(seconds=3600),
