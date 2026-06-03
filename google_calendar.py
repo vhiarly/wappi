@@ -4,12 +4,13 @@
 
 import os
 import uuid
+import urllib.parse
+import requests as http_requests
 from datetime import datetime, timedelta, timezone
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import Flow
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -73,48 +74,50 @@ def save_google_tokens(negocio_id: int, access_token: str, refresh_token: str, e
         )
         conn.commit()
 
-# ── 1. OAuth 2.0 flow (multitenant) ──────────────────────────────────────────
+# ── 1. OAuth 2.0 manual (sin google-auth-oauthlib Flow) ──────────────────────
+# Implementación directa con urllib + requests para evitar PKCE automático
+# que versiones recientes de google-auth-oauthlib añaden por defecto.
 
-def get_oauth_flow() -> Flow:
-    client_config = {
-        "web": {
-            "client_id":     GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-            "token_uri":     "https://oauth2.googleapis.com/token",
-            "redirect_uris": [GOOGLE_REDIRECT_URI],
-        }
-    }
-    return Flow.from_client_config(
-        client_config,
-        scopes=SCOPES,
-        redirect_uri=GOOGLE_REDIRECT_URI,
-    )
+_AUTH_URI  = "https://accounts.google.com/o/oauth2/auth"
+_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 def get_auth_url(negocio_id: int) -> str:
-    """URL para que el dueño conecte su Google Calendar. negocio_id va en el state."""
-    flow = get_oauth_flow()
-    auth_url, _ = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
-        state=str(negocio_id),
-    )
-    return auth_url
+    """Construye la URL de autorización de Google manualmente, sin PKCE."""
+    params = urllib.parse.urlencode({
+        "client_id":             GOOGLE_CLIENT_ID,
+        "redirect_uri":          GOOGLE_REDIRECT_URI,
+        "response_type":         "code",
+        "scope":                 " ".join(SCOPES),
+        "access_type":           "offline",
+        "prompt":                "consent",
+        "include_granted_scopes": "true",
+        "state":                 str(negocio_id),
+    })
+    return f"{_AUTH_URI}?{params}"
 
 def handle_oauth_callback(code: str, state: str) -> int:
-    """Intercambia el code por tokens y los guarda en DB. Llamar desde /oauth/callback."""
+    """Intercambia el code por tokens vía POST directo. Sin Flow, sin PKCE."""
     negocio_id = int(state)
-    flow = get_oauth_flow()
-    flow.fetch_token(code=code)
 
-    creds      = flow.credentials
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=3600)
+    resp = http_requests.post(_TOKEN_URI, data={
+        "code":          code,
+        "client_id":     GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri":  GOOGLE_REDIRECT_URI,
+        "grant_type":    "authorization_code",
+    })
+    resp.raise_for_status()
+    token_data = resp.json()
+
+    access_token  = token_data["access_token"]
+    refresh_token = token_data.get("refresh_token")
+    expires_in    = token_data.get("expires_in", 3600)
+    expires_at    = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
     save_google_tokens(
         negocio_id=negocio_id,
-        access_token=creds.token,
-        refresh_token=creds.refresh_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         expires_at=expires_at,
     )
     return negocio_id
