@@ -87,6 +87,10 @@ CREATE TABLE IF NOT EXISTS pedidos (
     creado_en       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS pedidos_cliente_pendiente
+    ON pedidos (numero_cliente)
+    WHERE estado = 'pendiente';
+
 CREATE TABLE IF NOT EXISTS contadores_turnos (
     codigo    VARCHAR(10) PRIMARY KEY REFERENCES negocios(codigo),
     contador  INT         NOT NULL DEFAULT 0

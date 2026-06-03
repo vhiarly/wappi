@@ -141,11 +141,13 @@ def _siguiente_turno(codigo):
     return row["contador"]
 
 def _guardar_pedido(numero_cliente, codigo, items, total, turno, direccion, referencia):
-    execute("""
+    row = execute("""
         INSERT INTO pedidos (numero_cliente, codigo, turno, items, total, direccion, referencia, estado)
         VALUES (%s, %s, %s, %s, %s, %s, %s, 'pendiente')
-        ON CONFLICT DO NOTHING
-    """, (numero_cliente, codigo, turno, Json(items), total, direccion, referencia))
+        ON CONFLICT (numero_cliente) WHERE estado = 'pendiente' DO NOTHING
+        RETURNING id
+    """, (numero_cliente, codigo, turno, Json(items), total, direccion, referencia), fetch="one")
+    return row is not None
 
 def _eliminar_pedido(numero_cliente):
     execute("DELETE FROM pedidos WHERE numero_cliente = %s AND estado = 'pendiente'", (numero_cliente,))
@@ -747,12 +749,15 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send):
         total = sum(i["precio"] for i in items)
         puesto = _siguiente_turno(codigo)
 
-        _guardar_pedido(
+        insertado = _guardar_pedido(
             numero_cliente, codigo, items, total, puesto,
             estado["direccion"], estado["referencia"]
         )
         estado["estado"] = "pedido_enviado"
         _set_estado(numero_cliente, estado)
+
+        if not insertado:
+            return "Tu pedido ya fue registrado.\n\n1. Ajustar pedido\n2. Cancelar"
 
         cola = _get_cola(codigo)
         posicion = len(cola)
