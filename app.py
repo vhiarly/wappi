@@ -10,6 +10,7 @@ from negocio_router import detectar_codigo, obtener_negocio, es_numero_negocio
 from flujo_pedidos import manejar_pedido, manejar_negocio, tiene_flujo_activo, limpiar_flujo, cancelar_timeout
 from flujo_citas import manejar_cita, manejar_negocio_citas, tiene_flujo_citas, tiene_sesion_admin_citas, iniciar_recordatorios
 from asistente_ia import consultar_ia, respuesta_ayuda
+from oauth_routes import oauth_bp
 
 load_dotenv()
 init_pool()
@@ -18,6 +19,7 @@ init_pool()
 execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
 
 app = Flask(__name__)
+app.register_blueprint(oauth_bp)
 
 
 @app.after_request
