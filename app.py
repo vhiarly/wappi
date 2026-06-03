@@ -28,8 +28,9 @@ def ping():
 
 @app.after_request
 def log_response(response):
-    numero = getattr(g, "numero_cliente", "?")
-    print(f"[OUT] {numero}: {response.get_data(as_text=True)!r}")
+    if response.content_type and "text" in response.content_type:
+        numero = getattr(g, "numero_cliente", "?")
+        print(f"[OUT] {numero}: {response.get_data(as_text=True)!r}")
     return response
 
 
