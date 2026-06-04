@@ -332,7 +332,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
             _set_estado_cita(numero_cliente, estado)
             desc = negocio.get("descripcion", "")
             desc_txt = f"\n\n{desc}" if desc else ""
-            return (f"Bienvenido a {negocio['nombre']}!{desc_txt}\n\n"
+            return (f"Bienvenido a *{negocio['nombre']}*{desc_txt}\n\n"
                     "¿Qué tipo de asesoría necesitas?\n\n"
                     "1. Online (Google Meet)\n"
                     "2. Presencial\n\n"
