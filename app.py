@@ -63,7 +63,8 @@ _PATRONES_NEGOCIO = {
                 r"^confirmar\s+pago\b", r"^rechazar\s+pago\b",
                 r"^chat\s+\d+", r"^cerrar\s+chat\s+\d+",
                 r"^comprobante\s+reembolso\s+\d+",
-                r"^no\s+show\s+\d+"],
+                r"^no\s+show\s+\d+",
+                r"^(aprobar|rechazar)\s+(reagendar|reembolso)\s+\d+"],
     "comun":   [r"^ayuda$", r"^admin\s+"],
 }
 

@@ -2,8 +2,40 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta, date, time as dtime
+from zoneinfo import ZoneInfo
 from db import execute
 from negocio_router import obtener_negocio
+
+TZ_RD = ZoneInfo("America/Santo_Domingo")
+HORAS_LABORALES_LIMITE = 7
+
+
+def _horas_laborales_hasta(fecha_cita, hora_cita_str, negocio):
+    """Calcula horas laborales desde ahora hasta la cita según el horario del negocio."""
+    ahora = datetime.now(TZ_RD)
+    h, m  = map(int, hora_cita_str.split(":"))
+    cita_dt = datetime(fecha_cita.year, fecha_cita.month, fecha_cita.day, h, m,
+                       tzinfo=TZ_RD)
+    if cita_dt <= ahora:
+        return 0
+
+    total_minutos = 0
+    cursor = ahora
+    while cursor < cita_dt:
+        dia_nombre = DIAS_ISO[cursor.weekday()]
+        h_dia = negocio.get("horario", {}).get(dia_nombre, {})
+        if h_dia.get("trabaja") and h_dia.get("inicio"):
+            ini_h, ini_m = map(int, h_dia["inicio"].split(":"))
+            fin_h, fin_m = map(int, h_dia["fin"].split(":"))
+            ini_dt = cursor.replace(hour=ini_h, minute=ini_m, second=0, microsecond=0)
+            fin_dt = cursor.replace(hour=fin_h, minute=fin_m, second=0, microsecond=0)
+            seg_ini = max(cursor, ini_dt)
+            seg_fin = min(cita_dt, fin_dt)
+            if seg_fin > seg_ini:
+                total_minutos += (seg_fin - seg_ini).seconds // 60
+        cursor = (cursor + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    return total_minutos / 60
 from google_calendar import get_google_tokens, crear_cita_con_meet, mensaje_confirmacion_virtual
 from asistente_ia import validar_comprobante
 
@@ -268,6 +300,96 @@ def manejar_relay_mensaje(numero, mensaje, media_url, twilio_send,
     Retorna texto de respuesta, "" para no responder, o None si no aplica relay.
     """
     msg_low = mensaje.lower().strip()
+
+    # ── Reagendar / Cancelar cita por cliente ──
+    m_react = re.match(r"(reagendar|cancelar\s+cita)(?:\s+([a-zA-Z0-9]+))?$", msg_low)
+    if m_react:
+        accion      = "reagendar" if "reagendar" in m_react.group(1) else "cancelar"
+        codigo_hint = (m_react.group(2) or "").upper() or None
+        cita = _get_cita_confirmada(numero, codigo_hint)
+        if not cita:
+            return (f"No encontre una cita confirmada"
+                    f"{' con ' + codigo_hint if codigo_hint else ''}. "
+                    f"Si tienes el codigo escribe: *{m_react.group(1)} [codigo]*")
+        negocio_r = obtener_negocio(cita["codigo"])
+        horas = _horas_laborales_hasta(cita["fecha"], str(cita["hora"])[:5], negocio_r)
+        politica = horas >= HORAS_LABORALES_LIMITE
+
+        if accion == "reagendar":
+            execute("""
+                INSERT INTO conversaciones_citas (numero_cliente, codigo, estado)
+                VALUES (%s, %s, 'reagendar_pendiente_aprobacion')
+                ON CONFLICT (numero_cliente) DO UPDATE SET
+                    codigo = EXCLUDED.codigo, estado = 'reagendar_pendiente_aprobacion'
+            """, (numero, cita["codigo"]))
+            nota_politica = (
+                f"El cliente tiene *{horas:.1f} horas laborales* de anticipacion "
+                f"({'reembolso garantizado si rechazas' if politica else 'fuera de politica — reembolso a tu criterio'})"
+            )
+            twilio_send(negocio_r["numero_negocio"],
+                f"📅 SOLICITUD DE REAGENDAR\n\n"
+                f"Cliente:  {numero}\n"
+                f"Servicio: {cita['nombre_servicio']}\n"
+                f"Cita:     {cita['fecha']} a las {_fmt12(str(cita['hora'])[:5])}\n\n"
+                f"{nota_politica}\n\n"
+                f"Escribe *aprobar reagendar {numero.replace('whatsapp:+','')}* para aceptar\n"
+                f"o *rechazar reagendar {numero.replace('whatsapp:+','')}* para rechazar."
+            )
+            return (
+                "Tu solicitud de reagendar fue enviada a "
+                f"*{negocio_r['nombre']}*. Te avisamos cuando respondan."
+            )
+
+        else:  # cancelar
+            if politica:
+                # +7h laborales → reembolso garantizado
+                execute("""
+                    INSERT INTO conversaciones_citas (numero_cliente, codigo, estado)
+                    VALUES (%s, %s, 'cancelacion_reembolso_garantizado')
+                    ON CONFLICT (numero_cliente) DO UPDATE SET
+                        codigo = EXCLUDED.codigo, estado = 'cancelacion_reembolso_garantizado'
+                """, (numero, cita["codigo"]))
+                twilio_send(negocio_r["numero_negocio"],
+                    f"❌ CANCELACIÓN CON REEMBOLSO OBLIGATORIO\n\n"
+                    f"Cliente:  {numero}\n"
+                    f"Servicio: {cita['nombre_servicio']}\n"
+                    f"Cita:     {cita['fecha']} a las {_fmt12(str(cita['hora'])[:5])}\n"
+                    f"Horas laborales restantes: {horas:.1f}h (politica: +7h = reembolso garantizado)\n\n"
+                    f"Debes procesar el reembolso completo.\n"
+                    f"Envia comprobante con: comprobante reembolso {numero.replace('whatsapp:+','')}"
+                )
+                execute("UPDATE citas SET estado = 'cancelada' WHERE id = %s", (cita["id"],))
+                return (
+                    "Tu cita fue cancelada. Tienes derecho a *reembolso completo* "
+                    f"ya que cancelaste con mas de {HORAS_LABORALES_LIMITE} horas laborales de anticipacion.\n\n"
+                    "Por favor envia tus datos bancarios para procesar la devolucion:\n\n"
+                    "*Banco:* [nombre]\n*Cuenta:* [numero]\n*Titular:* [nombre completo]"
+                )
+            else:
+                # -7h laborales → Pilar decide
+                execute("""
+                    INSERT INTO conversaciones_citas (numero_cliente, codigo, estado)
+                    VALUES (%s, %s, 'cancelacion_criterio_negocio')
+                    ON CONFLICT (numero_cliente) DO UPDATE SET
+                        codigo = EXCLUDED.codigo, estado = 'cancelacion_criterio_negocio'
+                """, (numero, cita["codigo"]))
+                twilio_send(negocio_r["numero_negocio"],
+                    f"❌ SOLICITUD DE CANCELACIÓN (fuera de politica)\n\n"
+                    f"Cliente:  {numero}\n"
+                    f"Servicio: {cita['nombre_servicio']}\n"
+                    f"Cita:     {cita['fecha']} a las {_fmt12(str(cita['hora'])[:5])}\n"
+                    f"Horas laborales restantes: {horas:.1f}h (politica: menos de {HORAS_LABORALES_LIMITE}h — reembolso a tu criterio)\n\n"
+                    f"Escribe *aprobar reembolso {numero.replace('whatsapp:+','')}* si decides reembolsar\n"
+                    f"o *rechazar reembolso {numero.replace('whatsapp:+','')}* si no aplica."
+                )
+                execute("UPDATE citas SET estado = 'cancelada' WHERE id = %s", (cita["id"],))
+                return (
+                    "Tu cita fue cancelada. Estás dentro de las "
+                    f"*{HORAS_LABORALES_LIMITE} horas laborales* de anticipacion, "
+                    "por lo que el reembolso queda a criterio del negocio.\n\n"
+                    "Te notificaremos su decision. "
+                    f"Ver politica: wasapeame.co/descargo"
+                )
 
     # ── No-show reportado por cliente ──
     if re.match(r"no\s+show(?:\s+[a-zA-Z]|$)", msg_low):
@@ -675,7 +797,9 @@ def _msg_confirmacion(estado, servicio, negocio):
         r += "\n\n⚠️ No compartas datos bancarios ni personales durante la videollamada."
     if tipo_final == "presencial":
         r += "\n\n⚠️ Por tu seguridad avisa a alguien de confianza sobre esta reunion antes de asistir."
-    r += f"\n\n¿El negocio no se presenta? Escribe: *no show {negocio.get('codigo','').lower()}*"
+    r += f"\n\n¿Necesitas cambiar? Escribe *reagendar {negocio.get('codigo','')}* o *cancelar cita {negocio.get('codigo','')}*"
+    r += f"\n¿El negocio no se presenta? Escribe: *no show {negocio.get('codigo','').lower()}*"
+    r += f"\nPolitica de cancelacion: wasapeame.co/descargo"
     return r
 
 
@@ -1024,6 +1148,51 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     codigo  = codigo_activo
     negocio = obtener_negocio(codigo)
     hoy     = date.today()
+
+    # ── aprobar/rechazar reagendar / aprobar/rechazar reembolso ──
+    m_apr = re.match(r"(aprobar|rechazar)\s+(reagendar|reembolso)\s+(\d+)", msg_low)
+    if m_apr:
+        decision, tipo_acc, num_corto = m_apr.group(1), m_apr.group(2), m_apr.group(3)
+        num_cliente = f"whatsapp:+{num_corto}"
+
+        if tipo_acc == "reagendar":
+            if decision == "aprobar":
+                _del_estado_cita(num_cliente)
+                twilio_send(num_cliente,
+                    f"✅ *{negocio['nombre']}* aprobó tu solicitud.\n\n"
+                    f"Para elegir la nueva fecha escribe: *{negocio['codigo']}*")
+                return f"Reagendar aprobado. El cliente recibirá nuevas opciones al escribir el código."
+            else:
+                conv_r = execute("SELECT * FROM conversaciones_citas WHERE numero_cliente=%s", (num_cliente,), fetch="one")
+                cita_r = _get_cita_confirmada(num_cliente, codigo) if conv_r else None
+                if cita_r:
+                    horas_r = _horas_laborales_hasta(cita_r["fecha"], str(cita_r["hora"])[:5], negocio)
+                    if horas_r >= HORAS_LABORALES_LIMITE:
+                        execute("UPDATE conversaciones_citas SET estado='esperando_datos_reembolso' WHERE numero_cliente=%s", (num_cliente,))
+                        twilio_send(num_cliente,
+                            f"*{negocio['nombre']}* no puede reagendar tu cita.\n\n"
+                            f"Como cancelaste con suficiente anticipacion tienes derecho a reembolso completo.\n\n"
+                            f"Envia tus datos:\n*Banco:* [nombre]\n*Cuenta:* [numero]\n*Titular:* [nombre]")
+                        return f"Reagendar rechazado. Cliente notificado — reembolso garantizado por politica."
+                _del_estado_cita(num_cliente)
+                twilio_send(num_cliente,
+                    f"*{negocio['nombre']}* no puede reagendar en este momento. "
+                    f"Tu cita original sigue vigente. Disculpa los inconvenientes.")
+                return f"Reagendar rechazado. Cliente notificado — cita original vigente."
+
+        else:  # reembolso
+            if decision == "aprobar":
+                execute("UPDATE conversaciones_citas SET estado='esperando_datos_reembolso' WHERE numero_cliente=%s", (num_cliente,))
+                twilio_send(num_cliente,
+                    f"✅ *{negocio['nombre']}* aprobó tu reembolso.\n\n"
+                    f"Envia tus datos:\n*Banco:* [nombre]\n*Cuenta:* [numero]\n*Titular:* [nombre]")
+                return f"Reembolso aprobado. Cliente enviará sus datos bancarios."
+            else:
+                _del_estado_cita(num_cliente)
+                twilio_send(num_cliente,
+                    f"*{negocio['nombre']}* no aprobó el reembolso en este caso. "
+                    f"Ver politica: wasapeame.co/descargo")
+                return f"Reembolso rechazado. Cliente notificado."
 
     # ── no show [número] — Pilar reporta cliente no-show ──
     m_ns = re.match(r"no\s+show\s+(\d+)$", msg_low)

@@ -39,7 +39,19 @@ _COMANDOS = {
         "Ej: _cerrar chat 18091234567_\n\n"
         "🧾 *comprobante reembolso [numero]*\n"
         "Enviar comprobante de devolucion al cliente (adjunta la foto)\n"
-        "Ej: _comprobante reembolso 18091234567_"
+        "Ej: _comprobante reembolso 18091234567_\n\n"
+        "✅ *aprobar reagendar [numero]*\n"
+        "Aprobar solicitud de cambio de fecha de un cliente\n"
+        "Ej: _aprobar reagendar 18091234567_\n\n"
+        "❌ *rechazar reagendar [numero]*\n"
+        "Rechazar solicitud de cambio de fecha\n"
+        "Ej: _rechazar reagendar 18091234567_\n\n"
+        "✅ *aprobar reembolso [numero]*\n"
+        "Aprobar reembolso cuando cancelaron con menos de 7h laborales (a tu criterio)\n"
+        "Ej: _aprobar reembolso 18091234567_\n\n"
+        "❌ *rechazar reembolso [numero]*\n"
+        "Rechazar reembolso fuera de politica\n"
+        "Ej: _rechazar reembolso 18091234567_"
     ),
 }
 
