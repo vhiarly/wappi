@@ -456,6 +456,24 @@ def manejar_relay_mensaje(numero, mensaje, media_url, twilio_send,
         if not relay["respondio"]:
             _actualizar_relay(numero, respondio=True)
 
+        # Cliente reporta que se resolvió
+        if re.search(r"\b(resuelto|se\s+logr[oó]|conect[eé]|lleg[oó]|ya\s+entr[eé]|ya\s+est[aá]|todo\s+bien)\b", msg_low):
+            cancelar_timer_relay(numero)
+            _cerrar_relay(numero)
+            _del_estado_cita(numero)
+            # Revertir el no-show (no cuenta)
+            execute("""
+                UPDATE citas SET no_show_negocio = GREATEST(no_show_negocio - 1, 0)
+                WHERE numero_cliente = %s AND codigo = %s AND estado = 'confirmada'
+                ORDER BY agendado_en DESC LIMIT 1
+            """, (numero, relay["codigo"]))
+            twilio_send(relay["numero_negocio"],
+                f"✅ El cliente ({numero}) confirmo que se logro el contacto. No-show cerrado.")
+            return (
+                "¡Genial! Nos alegra que hayan podido conectarse. "
+                "Esperamos que haya sido una sesión muy productiva. ¡Bendiciones! 🙏"
+            )
+
         # Cliente elige "más tarde"
         if re.search(r"\bm[aá]s\s+tarde\b", msg_low):
             cancelar_timer_relay(numero)
