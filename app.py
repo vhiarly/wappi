@@ -217,8 +217,8 @@ def privacidad():
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Política de Privacidad — Wasapeame</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="/static/wpicon.png"/>
-  <link rel="apple-touch-icon" sizes="180x180" href="/static/wpicon.png"/>
+  <link rel="icon" type="image/png" sizes="512x512" href="/static/favicon.png"/>
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon.png"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -226,15 +226,10 @@ def privacidad():
     body { background: var(--bg); color: var(--text); font-family: "Plus Jakarta Sans", sans-serif; min-height: 100vh; }
 
     header {
-      padding: 24px 40px;
+      padding: 32px 40px;
       border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; justify-content: center;
     }
-    header .logo-mark {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: var(--brand); display: flex; align-items: center; justify-content: center;
-    }
-    header .logo-mark svg { width: 20px; height: 20px; fill: #080D0A; }
     header span { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
 
     main { max-width: 720px; margin: 0 auto; padding: 60px 40px 100px; }
@@ -272,8 +267,7 @@ def privacidad():
 </head>
 <body>
   <header>
-    <img src="/static/wpicon.png" alt="Wasapeame" style="height:80px;width:auto;"/>
-    <span>Wasapeame</span>
+    <img src="/static/wpicon.png" alt="Wasapeame" style="height:112px;width:auto;mix-blend-mode:lighten;"/>
   </header>
 
   <main>
