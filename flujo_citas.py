@@ -592,40 +592,50 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_url=None):
         tipo_txt  = "Online (Google Meet)" if tipo_cita == "online" else "Presencial"
         lugar_txt = f"\nLugar:    {estado['lugar']}" if estado.get("lugar") else ""
 
+        numero_corto = numero_cliente.replace("whatsapp:+", "")
+
         if valido is False:
-            # Comprobante inválido — notificar a Pilar y rechazar
+            # Fraude detectado — notificar a Pilar y rechazar al cliente
             twilio_send(
                 negocio["numero_negocio"],
-                f"⚠️ COMPROBANTE SOSPECHOSO\n\n"
+                f"⚠️ COMPROBANTE SOSPECHOSO — NO CONFIRMADO\n\n"
                 f"Servicio: {servicio['nombre']}\n"
                 f"Tipo:     {tipo_txt}{lugar_txt}\n"
                 f"Dia:      {estado['nombre_dia']} — {_fmt12(estado['hora'])}\n"
                 f"Cliente:  {numero_cliente}\n"
-                f"Razon IA: {razon}",
+                f"Razon IA: {razon}\n\n"
+                f"Si crees que es un error escribe: confirmar pago {numero_corto}",
                 media_url=media_url,
             )
             return (
                 "No pudimos validar tu comprobante. Verifica que:\n\n"
                 "• El monto sea correcto\n"
                 "• La cuenta destino termine en *0083*\n"
-                "• La transferencia este completada\n\n"
+                "• Sea LBTR si es de otro banco (NO ACH)\n"
+                "• La transferencia este completada o en proceso\n\n"
                 "Envia de nuevo la foto o contacta al negocio."
             )
 
-        # Valido o no pudo verificar (None) — proceder y notificar a Pilar
-        estado_validacion = "✅ Validado por IA" if valido else "⚠️ No verificado — revisar manualmente"
+        # Valido o no pudo verificar — Pilar confirma manualmente
+        estado_ia = "✅ Validado por IA" if valido else "⚠️ No verificado por IA — revisa manualmente"
+        estado["estado"] = "esperando_confirmacion_negocio"
+        _set_estado_cita(numero_cliente, estado)
+
         twilio_send(
             negocio["numero_negocio"],
-            f"PAGO RECIBIDO — {estado_validacion}\n\n"
+            f"💰 PAGO RECIBIDO — {estado_ia}\n\n"
             f"Servicio: {servicio['nombre']}\n"
             f"Tipo:     {tipo_txt}{lugar_txt}\n"
             f"Dia:      {estado['nombre_dia']} — {_fmt12(estado['hora'])}\n"
-            f"Cliente:  {numero_cliente}",
+            f"Cliente:  {numero_cliente}\n\n"
+            f"Escribe *confirmar pago {numero_corto}* para aprobar\n"
+            f"o *rechazar pago {numero_corto}* si hay problema.",
             media_url=media_url,
         )
-        _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, twilio_send)
-        _del_estado_cita(numero_cliente)
-        return _msg_confirmacion(estado, servicio, negocio)
+        return (
+            "✅ Comprobante recibido. Estamos verificando tu pago.\n\n"
+            "Te confirmamos la cita en breve por este mismo chat."
+        )
 
     return None
 
@@ -660,6 +670,33 @@ def manejar_negocio_citas(numero, mensaje, twilio_send):
     codigo  = codigo_activo
     negocio = obtener_negocio(codigo)
     hoy     = date.today()
+
+    # ── confirmar pago / rechazar pago ──
+    m_confirmar = re.match(r"confirmar\s+pago\s+(\d+)", msg_low)
+    m_rechazar  = re.match(r"rechazar\s+pago\s+(\d+)", msg_low)
+    if m_confirmar or m_rechazar:
+        num_corto   = (m_confirmar or m_rechazar).group(1)
+        num_cliente = f"whatsapp:+{num_corto}"
+        conv = execute(
+            "SELECT * FROM conversaciones_citas WHERE numero_cliente = %s AND estado = 'esperando_confirmacion_negocio'",
+            (num_cliente,), fetch="one"
+        )
+        if not conv:
+            return f"No encontre una cita pendiente de confirmacion para {num_corto}."
+
+        if m_rechazar:
+            twilio_send(num_cliente,
+                "Tu pago no pudo ser verificado. Por favor contacta al negocio directamente.")
+            _del_estado_cita(num_cliente)
+            return f"Pago de {num_corto} rechazado. El cliente fue notificado."
+
+        # Confirmar
+        servicio_cita = negocio.get("servicios", {}).get(conv["servicio_clave"])
+        if servicio_cita:
+            _procesar_confirmacion(codigo, num_cliente, conv, servicio_cita, negocio, twilio_send)
+        _del_estado_cita(num_cliente)
+        twilio_send(num_cliente, _msg_confirmacion(conv, servicio_cita or {}, negocio))
+        return f"✅ Cita de {num_corto} confirmada. El cliente fue notificado."
 
     # ── mis citas hoy ──
     if re.search(r"mis\s+citas\s+hoy", msg_low):

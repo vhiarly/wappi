@@ -57,7 +57,8 @@ _PATRONES_NEGOCIO = {
     "pedidos": [r"^no\s+hay\b", r"\blisto\b"],
     "citas":   [r"mis\s+citas\s+(hoy|semana)", r"ocupado\s+hasta\b",
                 r"\bno\s+disponible\b", r"\blibre\s+\w+",
-                r"^cancelar\s+cita\b", r"^cancelar\s+\d{4}"],
+                r"^cancelar\s+cita\b", r"^cancelar\s+\d{4}",
+                r"^confirmar\s+pago\b", r"^rechazar\s+pago\b"],
     "comun":   [r"^ayuda$", r"^admin\s+"],
 }
 
