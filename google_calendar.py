@@ -160,7 +160,7 @@ def get_valid_credentials(codigo: str) -> Credentials:
 # ── 3 & 4. Crear evento (presencial o virtual con Meet) ───────────────────────
 
 def crear_cita_con_meet(
-    negocio_id: int,
+    codigo: str,
     nombre_cliente: str,
     servicio: str,
     inicio: datetime,

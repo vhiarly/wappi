@@ -1,9 +1,10 @@
 import re
 import threading
 import time
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time as dtime
 from db import execute
 from negocio_router import obtener_negocio
+from google_calendar import get_google_tokens, crear_cita_con_meet, mensaje_confirmacion_virtual
 
 DIAS_ISO  = {0:"lunes", 1:"martes", 2:"miercoles", 3:"jueves", 4:"viernes", 5:"sabado", 6:"domingo"}
 DIAS_ES   = {"lunes":0,"martes":1,"miercoles":2,"miércoles":2,
@@ -435,7 +436,34 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
             f"Cliente:  {numero_cliente}"
         )
 
+        # ── Google Calendar ──
+        meet_link = None
+        if get_google_tokens(codigo):
+            try:
+                es_virtual = "online" in estado["servicio_clave"]
+                h, m = map(int, estado["hora"].split(":"))
+                inicio = datetime.combine(fecha_dt, dtime(h, m))
+                meet_link = crear_cita_con_meet(
+                    codigo=codigo,
+                    nombre_cliente=numero_cliente,
+                    servicio=servicio["nombre"],
+                    inicio=inicio,
+                    duracion_minutos=servicio["duracion_minutos"],
+                    numero_whatsapp=numero_cliente,
+                    es_virtual=es_virtual,
+                )
+                if es_virtual and meet_link:
+                    twilio_send(numero_cliente, mensaje_confirmacion_virtual(
+                        negocio["nombre"], servicio["nombre"], inicio, meet_link
+                    ))
+            except Exception as e:
+                print(f"[Google Calendar] Error para {codigo}: {e}")
+
         _del_estado_cita(numero_cliente)
+
+        if meet_link:
+            return "Cita confirmada! El enlace de tu reunion virtual ya fue enviado."
+
         return (f"Cita confirmada!\n\n"
                 f"Servicio: {servicio['nombre']}\n"
                 f"Dia:      {estado['nombre_dia']}\n"
