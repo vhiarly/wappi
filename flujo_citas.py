@@ -54,8 +54,13 @@ def _proximo(nombre_dia):
 
 # ── Disponibilidad ────────────────────────────────────────────────────────────
 
-def _bloqueada(codigo, fecha, hora_str, duracion_min):
-    t0, t1 = _hm(hora_str), _hm(hora_str) + duracion_min
+BUFFER_PRESENCIAL = 120  # minutos mínimos entre citas presenciales
+
+def _bloqueada(codigo, fecha, hora_str, duracion_min, es_presencial=False):
+    t0 = _hm(hora_str)
+    # Para presencial: el slot nuevo ocupa max(duracion, BUFFER) minutos efectivos
+    efect_nuevo = max(duracion_min, BUFFER_PRESENCIAL) if es_presencial else duracion_min
+    t1 = t0 + efect_nuevo
     fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
 
     bloqueos = execute(
@@ -67,18 +72,20 @@ def _bloqueada(codigo, fecha, hora_str, duracion_min):
             return True
 
     citas = execute(
-        "SELECT hora, duracion_minutos FROM citas "
+        "SELECT hora, duracion_minutos, tipo FROM citas "
         "WHERE codigo = %s AND fecha = %s AND estado = 'confirmada'",
         (codigo, fecha_dt), fetch="all"
     ) or []
     for c in citas:
         ci = _hm(c["hora"])
-        if ci < t1 and ci + c["duracion_minutos"] > t0:
+        # Cita existente presencial también bloquea BUFFER minutos efectivos
+        efect_exist = max(c["duracion_minutos"], BUFFER_PRESENCIAL) if c.get("tipo") == "presencial" else c["duracion_minutos"]
+        if ci < t1 and ci + efect_exist > t0:
             return True
     return False
 
 
-def _horas_del_dia(negocio, fecha, duracion_min):
+def _horas_del_dia(negocio, fecha, duracion_min, es_presencial=False):
     dia_nombre = DIAS_ISO[datetime.strptime(fecha, "%Y-%m-%d").weekday()]
     h_dia = negocio.get("horario", {}).get(dia_nombre, {})
     if not h_dia.get("trabaja") or not h_dia.get("inicio"):
@@ -91,13 +98,13 @@ def _horas_del_dia(negocio, fecha, duracion_min):
     t = ini
     while t + duracion_min <= fin:
         hora_str = _mh(t)
-        if not _bloqueada(negocio["codigo"], fecha, hora_str, duracion_min):
+        if not _bloqueada(negocio["codigo"], fecha, hora_str, duracion_min, es_presencial):
             slots.append(hora_str)
         t += 30
     return slots
 
 
-def _dias_del_negocio(negocio, duracion_min):
+def _dias_del_negocio(negocio, duracion_min, es_presencial=False):
     hoy = date.today()
     dias = []
     for i in range(1, 9):
@@ -105,7 +112,7 @@ def _dias_del_negocio(negocio, duracion_min):
         nombre = DIAS_ISO[f.weekday()]
         if not negocio.get("horario", {}).get(nombre, {}).get("trabaja"):
             continue
-        if _horas_del_dia(negocio, f.isoformat(), duracion_min):
+        if _horas_del_dia(negocio, f.isoformat(), duracion_min, es_presencial):
             dias.append((f.isoformat(), DIAS_DISP[f.weekday()], f.strftime("%d/%m")))
     return dias
 
@@ -113,15 +120,15 @@ def _dias_del_negocio(negocio, duracion_min):
 # ── Textos ────────────────────────────────────────────────────────────────────
 
 def _txt_servicios(negocio):
-    lineas = [f"Bienvenido a {negocio['nombre']}!\n\nNuestros servicios:\n"]
+    lineas = [f"Nuestros servicios:\n"]
     for i, (_, s) in enumerate(negocio.get("servicios", {}).items(), 1):
         if s.get("activo", True):
             lineas.append(f"{i}. {s['nombre']} - ${s['precio']} pesos ({s['duracion_minutos']} min)")
     lineas += ["", "Escribe el *numero* del servicio.", "Escribe *cancelar* para salir."]
     return "\n".join(lineas)
 
-def _txt_dias(negocio, duracion_min):
-    dias = _dias_del_negocio(negocio, duracion_min)
+def _txt_dias(negocio, duracion_min, es_presencial=False):
+    dias = _dias_del_negocio(negocio, duracion_min, es_presencial)
     if not dias:
         return None
     lineas = ["Dias disponibles:\n"]
@@ -130,8 +137,8 @@ def _txt_dias(negocio, duracion_min):
     lineas.append("\nEscribe el *numero* del dia.")
     return "\n".join(lineas)
 
-def _txt_horas(negocio, fecha, duracion_min):
-    horas = _horas_del_dia(negocio, fecha, duracion_min)
+def _txt_horas(negocio, fecha, duracion_min, es_presencial=False):
+    horas = _horas_del_dia(negocio, fecha, duracion_min, es_presencial)
     if not horas:
         return None
     lineas = ["Horas disponibles:\n"]
@@ -384,7 +391,8 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
         estado.update({"estado": "esperando_dia", "servicio_clave": clave_s})
         _set_estado_cita(numero_cliente, estado)
 
-        txt = _txt_dias(negocio, serv_s["duracion_minutos"])
+        ep = estado.get("tipo") == "presencial"
+        txt = _txt_dias(negocio, serv_s["duracion_minutos"], ep)
         if not txt:
             _del_estado_cita(numero_cliente)
             return "No hay disponibilidad en los proximos dias. Intenta mas adelante."
@@ -392,7 +400,8 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
 
     # ── ESPERANDO DÍA ──
     if s == "esperando_dia" and servicio:
-        dias = _dias_del_negocio(negocio, servicio["duracion_minutos"])
+        ep = estado.get("tipo") == "presencial"
+        dias = _dias_del_negocio(negocio, servicio["duracion_minutos"], ep)
         if not dias:
             _del_estado_cita(numero_cliente)
             return "No hay disponibilidad en los proximos dias. Intenta mas adelante."
@@ -409,23 +418,24 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
                     break
 
         if not elegido:
-            return _txt_dias(negocio, servicio["duracion_minutos"])
+            return _txt_dias(negocio, servicio["duracion_minutos"], ep)
 
         fecha, nombre_dia, _ = elegido
         estado.update({"estado": "esperando_hora", "dia": fecha, "nombre_dia": nombre_dia})
         _set_estado_cita(numero_cliente, estado)
 
-        txt = _txt_horas(negocio, fecha, servicio["duracion_minutos"])
+        txt = _txt_horas(negocio, fecha, servicio["duracion_minutos"], ep)
         if not txt:
             estado["estado"] = "esperando_dia"
             _set_estado_cita(numero_cliente, estado)
-            return f"No hay horas disponibles el {nombre_dia}. Elige otro dia.\n\n" + _txt_dias(negocio, servicio["duracion_minutos"])
+            return f"No hay horas disponibles el {nombre_dia}. Elige otro dia.\n\n" + _txt_dias(negocio, servicio["duracion_minutos"], ep)
         return txt
 
     # ── ESPERANDO HORA ──
     if s == "esperando_hora" and servicio:
+        ep = estado.get("tipo") == "presencial"
         fecha = estado["dia"]
-        horas = _horas_del_dia(negocio, fecha, servicio["duracion_minutos"])
+        horas = _horas_del_dia(negocio, fecha, servicio["duracion_minutos"], ep)
 
         elegida = None
         if msg.isdigit():
@@ -439,7 +449,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
                     break
 
         if not elegida:
-            return _txt_horas(negocio, fecha, servicio["duracion_minutos"])
+            return _txt_horas(negocio, fecha, servicio["duracion_minutos"], ep)
 
         estado.update({"estado": "confirmando", "hora": elegida})
         _set_estado_cita(numero_cliente, estado)
@@ -464,11 +474,12 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
         execute("""
             INSERT INTO citas
                 (codigo, numero_cliente, servicio, nombre_servicio, fecha, hora,
-                 duracion_minutos, estado, agendado_en, recordatorio_enviado)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 'confirmada', NOW(), FALSE)
+                 duracion_minutos, estado, tipo, lugar, agendado_en, recordatorio_enviado)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'confirmada', %s, %s, NOW(), FALSE)
         """, (
             codigo, numero_cliente, estado["servicio_clave"], servicio["nombre"],
             fecha_dt, estado["hora"], servicio["duracion_minutos"],
+            estado.get("tipo"), estado.get("lugar"),
         ))
 
         tipo_txt  = "Online (Google Meet)" if estado.get("tipo") == "online" else "Presencial"
