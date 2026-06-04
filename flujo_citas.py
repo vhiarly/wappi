@@ -1239,6 +1239,23 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         cita = _get_cita_confirmada(num_cliente, codigo)
         if not cita:
             return f"No encontre una cita confirmada para ese número."
+
+        # Validar tiempo mínimo de espera
+        tipo_cita = cita.get("tipo")
+        buffer_min = 5 if tipo_cita == "online" else 10
+        h_c, m_c = map(int, str(cita["hora"])[:5].split(":"))
+        cita_dt = datetime(cita["fecha"].year, cita["fecha"].month, cita["fecha"].day,
+                           h_c, m_c, tzinfo=TZ_RD)
+        ahora = datetime.now(TZ_RD)
+        habilita_en = cita_dt + timedelta(minutes=buffer_min)
+        if ahora < cita_dt:
+            minutos = int((cita_dt - ahora).total_seconds() / 60)
+            return f"La cita de este cliente es en {minutos} minutos. Aún no ha comenzado."
+        if ahora < habilita_en:
+            espera = int((habilita_en - ahora).total_seconds() / 60) + 1
+            return (f"Dale {buffer_min} minutos de espera al cliente. "
+                    f"Podrás reportar el no-show en {espera} minuto{'s' if espera > 1 else ''}.")
+
         execute("UPDATE citas SET no_show_cliente = TRUE WHERE id = %s", (cita["id"],))
         if execute("SELECT 1 FROM conversaciones_citas WHERE numero_cliente = %s", (num_cliente,), fetch="one"):
             execute("UPDATE conversaciones_citas SET estado = 'noshow_cliente_esperando' WHERE numero_cliente = %s", (num_cliente,))
