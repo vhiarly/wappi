@@ -672,6 +672,9 @@ def _msg_confirmacion(estado, servicio, negocio):
         r += f"Costo:    *${costo_final:,} DOP*\n"
     if tipo_final == "online":
         r += "\nEn breve recibes el enlace de Google Meet por este chat."
+    if tipo_final == "presencial":
+        r += "\n\n⚠️ Por tu seguridad avisa a alguien de confianza sobre esta reunion antes de asistir."
+    r += f"\n\n¿El negocio no se presenta? Escribe: *no show {negocio.get('codigo','').lower()}*"
     return r
 
 
