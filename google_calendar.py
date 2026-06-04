@@ -238,7 +238,10 @@ def mensaje_confirmacion_virtual(
     hangout_link: str,
 ) -> str:
     """Arma el texto de confirmación con el Meet link para enviar vía Twilio."""
-    fecha_str = inicio.strftime("%A %d de %B, %Y")
+    DIAS_ES   = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+    MESES_ES  = ["enero","febrero","marzo","abril","mayo","junio",
+                 "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    fecha_str = f"{DIAS_ES[inicio.weekday()]} {inicio.day} de {MESES_ES[inicio.month-1]} {inicio.year}"
     hora_str  = inicio.strftime("%I:%M %p")
 
     return (
