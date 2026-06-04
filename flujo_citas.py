@@ -536,13 +536,29 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
         if meet_link:
             return "Cita confirmada! El enlace de tu reunion virtual ya fue enviado."
 
-        lugar_conf = f"\nLugar:    {estado['lugar']}" if estado.get("lugar") else ""
-        return (f"Cita confirmada!\n\n"
-                f"Servicio: {servicio['nombre']}\n"
-                f"Dia:      {estado['nombre_dia']}\n"
-                f"Hora:     {_fmt12(estado['hora'])}"
-                f"{lugar_conf}\n\n"
-                f"Te esperamos en {negocio['nombre']}.")
+        tipo_final = estado.get("tipo")
+        if tipo_final == "online":
+            costo_final = negocio.get("costo_online") or servicio["precio"]
+            tipo_linea  = "💻 *Online — Google Meet*"
+        elif tipo_final == "presencial":
+            costo_final = negocio.get("costo_presencial") or servicio["precio"]
+            tipo_linea  = f"📍 *{estado['lugar']}*" if estado.get("lugar") else "📍 *Presencial*"
+        else:
+            costo_final = servicio["precio"]
+            tipo_linea  = None
+
+        r  = "✅ *Cita confirmada*\n\n"
+        r += f"Negocio:  {negocio['nombre']}\n"
+        r += f"Servicio: {servicio['nombre']}\n"
+        if tipo_linea:
+            r += f"Tipo:     {tipo_linea}\n"
+        r += f"Dia:      {estado['nombre_dia']}\n"
+        r += f"Hora:     *{_fmt12(estado['hora'])}*\n"
+        if costo_final:
+            r += f"Costo:    *${costo_final:,} DOP*\n"
+        if tipo_final == "online":
+            r += "\nEn breve recibes el enlace de Google Meet por este chat."
+        return r
 
     return None
 
