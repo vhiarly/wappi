@@ -270,7 +270,7 @@ def privacidad():
 </head>
 <body>
   <header>
-    <img src="/static/wpicon.png" alt="Wasapeame" style="height:36px;width:auto;"/>
+    <img src="/static/wpicon.png" alt="Wasapeame" style="height:56px;width:auto;"/>
     <span>Wasapeame</span>
   </header>
 
