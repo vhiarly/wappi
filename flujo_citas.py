@@ -847,11 +847,19 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     negocio = obtener_negocio(codigo)
     hoy     = date.today()
 
-    # ── chat [número] — abrir relay ──
+    # ── chat [número] — abrir relay (solo si hay pago pendiente de confirmar) ──
     m_chat = re.match(r"chat\s+(\d+)", msg_low)
     if m_chat:
         num_corto   = m_chat.group(1)
         num_cliente = f"whatsapp:+{num_corto}"
+        conv_pago = execute(
+            "SELECT 1 FROM conversaciones_citas WHERE numero_cliente = %s "
+            "AND estado = 'esperando_confirmacion_negocio'",
+            (num_cliente,), fetch="one"
+        )
+        if not conv_pago:
+            return (f"No hay un pago pendiente de confirmacion para {num_corto}.\n"
+                    f"El chat directo solo se activa cuando un cliente ya pago y necesitas coordinar con el.")
         _abrir_relay(num_cliente, numero, codigo)
         if iniciar_timer_relay:
             iniciar_timer_relay(num_cliente)
