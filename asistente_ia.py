@@ -101,14 +101,17 @@ def validar_comprobante(media_url, monto_esperado, cuenta_ultimos4="0083"):
                             f"- BHD: dice 'Transaccion completada', campo Destino muestra nombre y termina en '{cuenta_ultimos4}'\n"
                             f"- Popular: dice 'Tu transferencia ha sido realizada', campo Beneficiario muestra la cuenta completa terminando en '{cuenta_ultimos4}'\n\n"
                             f"Verifica TODOS estos criterios:\n"
-                            f"1. El estado indica que la transaccion fue COMPLETADA/PROCESADA exitosamente\n"
+                            f"1. El estado indica COMPLETADA/PROCESADA exitosamente\n"
                             f"2. La cuenta destino/beneficiario termina en {cuenta_ultimos4}\n"
                             f"3. El monto es aproximadamente {monto_esperado} DOP "
-                            f"(acepta hasta 5% de diferencia por impuesto DGII 0.15% u otros cargos)\n"
-                            f"4. La fecha es de hoy ({hoy}) o muy reciente (maximo 24h)\n\n"
+                            f"(acepta hasta 5% de diferencia por impuesto DGII 0.15%)\n"
+                            f"4. La fecha es de hoy ({hoy}) o muy reciente (maximo 24h)\n"
+                            f"5. NO hay senales de manipulacion digital: pixelacion alrededor "
+                            f"de numeros, inconsistencia de fuente en el monto, bordes irregulares "
+                            f"en cifras, o numeros con tamano/color diferente al resto del texto\n\n"
                             f"Responde SOLO en este formato:\n"
                             f"VALIDO o INVALIDO\n"
-                            f"Razon: [explica brevemente en español]"
+                            f"Razon: [explica brevemente en español, menciona cual criterio fallo si aplica]"
                         ),
                     },
                 ],
