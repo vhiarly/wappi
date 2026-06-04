@@ -217,6 +217,8 @@ def privacidad():
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Política de Privacidad — Wasapeame</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/wpicon.png"/>
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/wpicon.png"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -270,7 +272,7 @@ def privacidad():
 </head>
 <body>
   <header>
-    <img src="/static/wpicon.png" alt="Wasapeame" style="height:56px;width:auto;"/>
+    <img src="/static/wpicon.png" alt="Wasapeame" style="height:80px;width:auto;"/>
     <span>Wasapeame</span>
   </header>
 
