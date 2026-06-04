@@ -117,7 +117,7 @@ def _txt_servicios(negocio):
     for i, (_, s) in enumerate(negocio.get("servicios", {}).items(), 1):
         if s.get("activo", True):
             lineas.append(f"{i}. {s['nombre']} - ${s['precio']} pesos ({s['duracion_minutos']} min)")
-    lineas += ["", "Escribe el numero del servicio.", "Escribe cancelar para salir."]
+    lineas += ["", "Escribe el *numero* del servicio.", "Escribe *cancelar* para salir."]
     return "\n".join(lineas)
 
 def _txt_dias(negocio, duracion_min):
@@ -127,7 +127,7 @@ def _txt_dias(negocio, duracion_min):
     lineas = ["Dias disponibles:\n"]
     for i, (_, nombre, display) in enumerate(dias, 1):
         lineas.append(f"{i}. {nombre} {display}")
-    lineas.append("\nEscribe el numero del dia.")
+    lineas.append("\nEscribe el *numero* del dia.")
     return "\n".join(lineas)
 
 def _txt_horas(negocio, fecha, duracion_min):
@@ -137,7 +137,7 @@ def _txt_horas(negocio, fecha, duracion_min):
     lineas = ["Horas disponibles:\n"]
     for i, h in enumerate(horas, 1):
         lineas.append(f"{i}. {_fmt12(h)}")
-    lineas.append("\nEscribe el numero de la hora.")
+    lineas.append("\nEscribe el *numero* de la hora.")
     return "\n".join(lineas)
 
 
@@ -408,14 +408,14 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
         r += f"Precio:   ${servicio['precio']} pesos\n"
         r += f"Dia:      {estado['nombre_dia']}\n"
         r += f"Hora:     {_fmt12(elegida)}\n"
-        r += "\nEscribe si para confirmar o cancelar para salir."
+        r += "\nEscribe *si* para confirmar o *cancelar* para salir."
         return r
 
     # ── CONFIRMANDO ──
     if s == "confirmando" and servicio:
         if not re.search(r"\b(si|sí|confirmar|confirma|dale|ok|listo)\b", msg):
             return (f"Servicio: {servicio['nombre']} — {_fmt12(estado['hora'])} el {estado['nombre_dia']}\n\n"
-                    "Escribe si para confirmar o cancelar para salir.")
+                    "Escribe *si* para confirmar o *cancelar* para salir.")
 
         fecha_dt = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
         execute("""
@@ -615,7 +615,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send):
                 target["numero_cliente"],
                 f"Tu cita de {target['nombre_servicio']} en {negocio['nombre']} "
                 f"el {fecha_str} a las {_fmt12(target['hora'])} fue cancelada.\n\n"
-                f"Escribe {codigo} si quieres agendar una nueva cita."
+                f"Escribe *{codigo}* si quieres agendar una nueva cita."
             )
         return f"Cita de {target['numero_cliente']} cancelada."
 
