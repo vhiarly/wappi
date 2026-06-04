@@ -712,6 +712,26 @@ def manejar_no_show_cliente(numero_cliente, mensaje, twilio_send):
 def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
     """Procesa el no-show del negocio para una cita específica."""
     negocio = obtener_negocio(cita["codigo"])
+
+    # Validar que haya pasado el tiempo mínimo de espera
+    tipo_cita = cita.get("tipo")
+    buffer_min = 5 if tipo_cita == "online" else 10
+    h, m = map(int, str(cita["hora"])[:5].split(":"))
+    cita_dt = datetime(cita["fecha"].year, cita["fecha"].month, cita["fecha"].day,
+                       h, m, tzinfo=TZ_RD)
+    ahora = datetime.now(TZ_RD)
+    habilita_en = cita_dt + timedelta(minutes=buffer_min)
+
+    if ahora < cita_dt:
+        minutos_para_cita = int((cita_dt - ahora).total_seconds() / 60)
+        return (f"Tu cita es en *{minutos_para_cita} minutos*. "
+                f"Puedes reportar no-show {'5' if tipo_cita == 'online' else '10'} minutos "
+                f"después de la hora acordada.")
+
+    if ahora < habilita_en:
+        espera = int((habilita_en - ahora).total_seconds() / 60) + 1
+        return (f"Dale {'5' if tipo_cita == 'online' else '10'} minutos de espera. "
+                f"Podrás reportar el no-show en *{espera} minuto{'s' if espera > 1 else ''}*.")
     no_show_count = (cita.get("no_show_negocio") or 0) + 1
     execute("UPDATE citas SET no_show_negocio = %s WHERE id = %s", (no_show_count, cita["id"]))
 
