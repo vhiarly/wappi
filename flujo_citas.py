@@ -119,11 +119,15 @@ def _dias_del_negocio(negocio, duracion_min, es_presencial=False):
 
 # ── Textos ────────────────────────────────────────────────────────────────────
 
-def _txt_servicios(negocio):
+def _txt_servicios(negocio, tipo=None):
     lineas = [f"Nuestros servicios:\n"]
     for i, (_, s) in enumerate(negocio.get("servicios", {}).items(), 1):
         if s.get("activo", True):
-            lineas.append(f"{i}. {s['nombre']} - ${s['precio']} pesos ({s['duracion_minutos']} min)")
+            lineas.append(f"{i}. {s['nombre']}")
+    if tipo == "online" and negocio.get("costo_online"):
+        lineas.append(f"\nCosto de consultoría: *${negocio['costo_online']:,} DOP*")
+    elif tipo == "presencial" and negocio.get("costo_presencial"):
+        lineas.append(f"\nCosto de consultoría: *${negocio['costo_presencial']:,} DOP*")
     lineas += ["", "Escribe el *numero* del servicio.", "Escribe *cancelar* para salir."]
     return "\n".join(lineas)
 
@@ -346,7 +350,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
         if msg in ("1", "online"):
             estado.update({"estado": "esperando_servicio", "tipo": "online"})
             _set_estado_cita(numero_cliente, estado)
-            return _txt_servicios(negocio)
+            return _txt_servicios(negocio, estado.get("tipo"))
         if msg in ("2", "presencial"):
             estado.update({"estado": "esperando_lugar", "tipo": "presencial"})
             _set_estado_cita(numero_cliente, estado)
@@ -363,14 +367,14 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
             lugar = lugares[int(msg) - 1]
             estado.update({"estado": "esperando_servicio", "lugar": lugar})
             _set_estado_cita(numero_cliente, estado)
-            return _txt_servicios(negocio)
+            return _txt_servicios(negocio, estado.get("tipo"))
         return f"Escribe un numero del 1 al {len(lugares)}."
 
     # ── ESPERANDO SERVICIO ──
     if s == "esperando_servicio":
         if not msg:
             _set_estado_cita(numero_cliente, estado)
-            return _txt_servicios(negocio)
+            return _txt_servicios(negocio, estado.get("tipo"))
 
         servicios = [(c, sv) for c, sv in negocio.get("servicios", {}).items()
                      if sv.get("activo", True)]
@@ -387,7 +391,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
 
         if not elegido:
             _set_estado_cita(numero_cliente, estado)
-            return _txt_servicios(negocio)
+            return _txt_servicios(negocio, estado.get("tipo"))
 
         clave_s, serv_s = elegido
         estado.update({"estado": "esperando_dia", "servicio_clave": clave_s})
@@ -456,11 +460,19 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send):
         estado.update({"estado": "confirmando", "hora": elegida})
         _set_estado_cita(numero_cliente, estado)
 
+        tipo = estado.get("tipo")
+        if tipo == "online":
+            costo = negocio.get("costo_online") or servicio["precio"]
+        elif tipo == "presencial":
+            costo = negocio.get("costo_presencial") or servicio["precio"]
+        else:
+            costo = servicio["precio"]
+
         r  = "Resumen de tu cita:\n\n"
         r += f"Negocio:  {negocio['nombre']}\n"
         r += f"Servicio: {servicio['nombre']}\n"
         r += f"Duracion: {servicio['duracion_minutos']} min\n"
-        r += f"Precio:   ${servicio['precio']} pesos\n"
+        r += f"Costo:    *${costo:,} DOP*\n"
         r += f"Dia:      {estado['nombre_dia']}\n"
         r += f"Hora:     {_fmt12(elegida)}\n"
         r += "\nEscribe *si* para confirmar o *cancelar* para salir."
