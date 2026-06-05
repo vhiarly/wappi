@@ -241,7 +241,7 @@ def webhook():
         msg.body(
             "Bienvenido a *Wasapeame* 👋\n\n"
             "Conecta con tu negocio favorito directo desde WhatsApp.\n"
-            "🛒 Pedidos  |  📅 Citas  |  💬 Consultas  |  📦 Catálogos\n\n"
+            "🛒 Pedidos  |  📅 Citas  |  💬 Consultas\n\n"
             "🔑 Escribe el *código del negocio* para comenzar.\n"
             "📲 Si no lo tienes, pídelo al negocio."
         )
