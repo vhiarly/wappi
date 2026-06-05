@@ -660,7 +660,7 @@ def tiene_sesion_admin_citas(numero):
 # ── Recordatorios ────────────────────────────────────────────────────────────
 
 def _verificar_recordatorios(twilio_send):
-    now = datetime.now()
+    now = datetime.now(TZ_RD)
     citas = execute("""
         SELECT c.id, c.numero_cliente, c.nombre_servicio, c.fecha, c.hora,
                c.agendado_en, n.nombre AS nombre_negocio
@@ -674,10 +674,14 @@ def _verificar_recordatorios(twilio_send):
 
     for cita in citas:
         fecha_str = cita["fecha"].isoformat() if hasattr(cita["fecha"], "isoformat") else cita["fecha"]
-        cita_dt   = datetime.strptime(f"{fecha_str} {cita['hora']}", "%Y-%m-%d %H:%M")
+        cita_dt   = datetime.strptime(f"{fecha_str} {cita['hora']}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ_RD)
         booking_dt = cita["agendado_en"]
         if not isinstance(booking_dt, datetime):
             booking_dt = datetime.fromisoformat(str(booking_dt))
+        if booking_dt.tzinfo is None:
+            booking_dt = booking_dt.replace(tzinfo=TZ_RD)
+        else:
+            booking_dt = booking_dt.astimezone(TZ_RD)
         horas_hasta = (cita_dt - booking_dt).total_seconds() / 3600
         reminder_dt = (cita_dt - timedelta(hours=3)) if horas_hasta <= 24 else (booking_dt + timedelta(hours=23))
         if now >= reminder_dt:
