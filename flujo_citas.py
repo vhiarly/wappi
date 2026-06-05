@@ -1451,7 +1451,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     m_apr = re.match(r"(aprobar|rechazar)\s+(reagendar|reembolso)\s+(\d+)", msg_low)
     if m_apr:
         decision, tipo_acc, num_corto = m_apr.group(1), m_apr.group(2), m_apr.group(3)
-        num_cliente = f"whatsapp:+{num_corto}"
+        num_cliente = f"+{num_corto}"
 
         if tipo_acc == "reagendar":
             if decision == "aprobar":
@@ -1495,7 +1495,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     # ── no show [número] — Pilar reporta cliente no-show ──
     m_ns = re.match(r"no\s+show\s+(\d+)$", msg_low)
     if m_ns:
-        num_cliente = f"whatsapp:+{m_ns.group(1)}"
+        num_cliente = f"+{m_ns.group(1)}"
         cita = _get_cita_confirmada(num_cliente, codigo)
         if not cita:
             return f"No encontre una cita confirmada para ese número."
@@ -1538,7 +1538,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     m_chat = re.match(r"chat\s+(\d+)", msg_low)
     if m_chat:
         num_corto   = m_chat.group(1)
-        num_cliente = f"whatsapp:+{num_corto}"
+        num_cliente = f"+{num_corto}"
         conv_pago = execute(
             "SELECT 1 FROM conversaciones_citas WHERE numero_cliente = %s "
             "AND estado = 'esperando_confirmacion_negocio'",
@@ -1566,7 +1566,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     m_cerrar = re.match(r"cerrar\s+chat\s+(\d+)", msg_low)
     if m_cerrar:
         num_corto   = m_cerrar.group(1)
-        num_cliente = f"whatsapp:+{num_corto}"
+        num_cliente = f"+{num_corto}"
         relay = _get_relay(num_cliente)
         if not relay:
             return f"No hay una sesion de chat activa con {num_corto}."
@@ -1617,7 +1617,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     # ── comprobante reembolso [número] ──
     m_comp = re.match(r"comprobante\s+reembolso\s+(\d+)", msg_low)
     if m_comp:
-        num_cliente = f"whatsapp:+{m_comp.group(1)}"
+        num_cliente = f"+{m_comp.group(1)}"
         if not media_id:
             return "Adjunta la foto del comprobante de reembolso con el mensaje."
         twilio_send(
@@ -1632,7 +1632,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     m_rechazar  = re.match(r"rechazar\s+pago\s+\+?(\d+)", msg_low)
     if m_confirmar or m_rechazar:
         num_corto   = (m_confirmar or m_rechazar).group(1)
-        num_cliente = f"whatsapp:+{num_corto}"
+        num_cliente = f"+{num_corto}"
         conv = execute(
             "SELECT * FROM conversaciones_citas WHERE numero_cliente = %s AND estado = 'esperando_confirmacion_negocio'",
             (num_cliente,), fetch="one"
