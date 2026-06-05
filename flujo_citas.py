@@ -1049,6 +1049,8 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
             es_virtual = estado.get("tipo") == "online"
             h, m = map(int, estado["hora"].split(":"))
             inicio = datetime.combine(fecha_dt, dtime(h, m))
+            datos_cli = _get_datos_cliente(numero_cliente)
+            email_cli = datos_cli["email"] if datos_cli else estado.get("cliente_email")
             meet_link = crear_cita_con_meet(
                 codigo=codigo,
                 nombre_cliente=estado.get("cliente_nombre") or numero_cliente,
@@ -1057,6 +1059,7 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
                 duracion_minutos=servicio["duracion_minutos"],
                 numero_whatsapp=numero_cliente,
                 es_virtual=es_virtual,
+                email_cliente=email_cli,
             )
             if es_virtual and meet_link:
                 import time as _time
