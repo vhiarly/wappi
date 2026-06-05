@@ -10,6 +10,7 @@ from db import init_pool, execute
 from negocio_router import detectar_codigo, obtener_negocio, es_numero_negocio
 from flujo_pedidos import manejar_pedido, manejar_negocio, tiene_flujo_activo, limpiar_flujo, cancelar_timeout
 from flujo_citas import manejar_cita, manejar_negocio_citas, tiene_flujo_citas, tiene_sesion_admin_citas, iniciar_recordatorios
+from flujo_registro import manejar_registro, iniciar_registro, tiene_flujo_registro
 from asistente_ia import consultar_ia, respuesta_ayuda
 from oauth_routes import oauth_bp
 
@@ -136,7 +137,8 @@ def _msg_perdido():
         "No entendí tu mensaje. ¿Qué necesitas?\n\n"
         "1. Hacer un pedido\n"
         "2. Agendar una cita\n"
-        "3. Hablar con un negocio\n\n"
+        "3. Hablar con un negocio\n"
+        "4. Registrar mi negocio\n\n"
         "Escribe el número de tu opción o el *código del negocio* directamente."
     )
 
@@ -230,6 +232,13 @@ def webhook():
             _responder(msg, resultado, numero_cliente)
         return str(resp)
 
+    # ── FLUJO REGISTRO ──
+    if tiene_flujo_registro(numero_cliente):
+        resultado = manejar_registro(numero_cliente, mensaje, twilio_send)
+        if resultado:
+            msg.body(resultado)
+        return str(resp)
+
     # ── ROUTER DE NEGOCIOS (clientes) ──
     codigo, resto = detectar_codigo(mensaje)
     if codigo or tiene_flujo_activo(numero_cliente) or tiene_flujo_citas(numero_cliente):
@@ -261,7 +270,9 @@ def webhook():
             "Conecta con tu negocio favorito directo desde WhatsApp.\n"
             "🛒 Pedidos  |  📅 Citas  |  💬 Consultas\n\n"
             "🔑 Escribe el *código del negocio* para comenzar.\n"
-            "📲 Si no lo tienes, pídelo al negocio."
+            "📲 Si no lo tienes, pídelo al negocio.\n\n"
+            "¿Tienes un negocio y quieres unirte?\n"
+            "Escribe *4* para registrarte."
         )
         return str(resp)
 
@@ -274,6 +285,10 @@ def webhook():
         return str(resp)
     if mensaje_lower.strip() == "3":
         msg.body("Escribe el *código del negocio* para conectarte.\n📲 Si no lo tienes, pídelo directamente al negocio.")
+        return str(resp)
+    if mensaje_lower.strip() == "4":
+        resultado = iniciar_registro(numero_cliente, twilio_send)
+        msg.body(resultado)
         return str(resp)
 
     msg.body(_msg_perdido())

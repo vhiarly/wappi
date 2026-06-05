@@ -145,6 +145,23 @@ CREATE TABLE IF NOT EXISTS consultas_ia (
     count   INT         NOT NULL DEFAULT 0,
     PRIMARY KEY (codigo, mes)
 );
+
+CREATE TABLE IF NOT EXISTS conversaciones_registro (
+    numero_cliente  VARCHAR(50) PRIMARY KEY,
+    estado          VARCHAR(50) NOT NULL,
+    nombre_negocio  VARCHAR(200),
+    tipo            VARCHAR(30),
+    actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS leads_negocios (
+    id               SERIAL      PRIMARY KEY,
+    numero_whatsapp  VARCHAR(50),
+    nombre_negocio   VARCHAR(200),
+    tipo             VARCHAR(30),
+    numero_contacto  VARCHAR(50),
+    creado_en        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
