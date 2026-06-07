@@ -1309,16 +1309,18 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             bienvenida += f"\n\n{desc}"
 
         if lugares:
+            es_domicilio = any(l.get("tipo") == "domicilio" for l in lugares)
+            label_presencial = "A domicilio" if es_domicilio else "Presencial"
             estado["estado"] = "esperando_tipo"
             _set_estado_cita(numero_cliente, estado)
             twilio_send(numero_cliente, bienvenida)
             enviado = _enviar_botones(numero_cliente,
                 "¿Cómo prefieres tu cita?",
-                [("online", "Online (Meet)"), ("presencial", "Presencial")])
+                [("online", "Online (Meet)"), ("presencial", label_presencial)])
             if enviado:
                 return None
-            return ("¿Qué tipo de asesoría necesitas?\n\n"
-                    "1. Online (Google Meet)\n2. Presencial\n\n"
+            return (f"¿Qué tipo de asesoría necesitas?\n\n"
+                    f"1. Online (Google Meet)\n2. {label_presencial}\n\n"
                     "Escribe *1* o *2*. Escribe *cancelar* para salir.")
 
         estado["estado"] = "esperando_servicio"
@@ -1331,6 +1333,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
 
     # ── ESPERANDO TIPO ──
     if s == "esperando_tipo":
+        es_domicilio = any(l.get("tipo") == "domicilio" for l in lugares)
         if msg in ("1", "online"):
             estado.update({"estado": "esperando_servicio", "tipo": "online"})
             _set_estado_cita(numero_cliente, estado)
@@ -1339,6 +1342,10 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                 return None
             return _txt_servicios(negocio, "online")
         if msg in ("2", "presencial"):
+            if es_domicilio:
+                estado.update({"estado": "esperando_direccion_domicilio", "tipo": "presencial"})
+                _set_estado_cita(numero_cliente, estado)
+                return "¿Cuál es tu dirección? (calle, sector, ciudad)"
             estado.update({"estado": "esperando_lugar", "tipo": "presencial"})
             _set_estado_cita(numero_cliente, estado)
             enviado = _enviar_lista_lugares(numero_cliente, lugares)
@@ -1349,7 +1356,17 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                 lineas.append(f"{i}. {_lugar_nombre(l)}")
             lineas.append("\nEscribe el *numero* del lugar.")
             return "\n".join(lineas)
-        return "Escribe *1* para Online o *2* para Presencial."
+        label_presencial = "A domicilio" if es_domicilio else "Presencial"
+        return f"Escribe *1* para Online o *2* para {label_presencial}."
+
+    # ── ESPERANDO DIRECCIÓN DOMICILIO ──
+    if s == "esperando_direccion_domicilio":
+        estado.update({"estado": "esperando_servicio", "lugar": msg})
+        _set_estado_cita(numero_cliente, estado)
+        enviado = _enviar_lista_servicios(numero_cliente, negocio)
+        if enviado:
+            return None
+        return _txt_servicios(negocio, estado.get("tipo"))
 
     # ── ESPERANDO LUGAR ──
     if s == "esperando_lugar":
