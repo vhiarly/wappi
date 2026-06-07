@@ -1158,13 +1158,13 @@ def _enviar_lista_servicios(numero_cliente, negocio):
                  if sv.get("activo", True)]
     if not servicios:
         return False
-    filas = [(clave, sv["nombre"], f"{sv['duracion_minutos']} min")
+    filas = [(clave, sv["nombre"], sv.get("descripcion") or f"{sv['duracion_minutos']} min")
              for clave, sv in servicios]
     return _enviar_lista(numero_cliente, "Elige tu servicio:", filas, "Ver servicios")
 
 
 def _enviar_lista_lugares(numero_cliente, lugares):
-    filas = [(str(i), _lugar_nombre(l), "") for i, l in enumerate(lugares, 1)]
+    filas = [(str(i), _lugar_nombre(l), _lugar_maps(l) or "") for i, l in enumerate(lugares, 1)]
     return _enviar_lista(numero_cliente, "Elige el lugar de reunion:", filas, "Ver lugares")
 
 def _enviar_lista_dias(numero_cliente, negocio, duracion_min, es_presencial=False):
