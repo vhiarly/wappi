@@ -14,6 +14,8 @@ from flujo_citas import (manejar_cita, manejar_negocio_citas, tiene_flujo_citas,
                          manejar_relay_mensaje, cerrar_relay_timeout)
 from flujo_registro import manejar_registro, iniciar_registro, tiene_flujo_registro
 from asistente_ia import consultar_ia, respuesta_ayuda
+from transcripcion_medica import procesar_nota_voz_medica
+from flujo_citas import guardar_transcripcion_pendiente
 from oauth_routes import oauth_bp
 
 load_dotenv()
@@ -45,14 +47,21 @@ META_PHONE_NUMBER_ID = os.getenv("META_PHONE_NUMBER_ID")
 META_VERIFY_TOKEN    = os.getenv("META_VERIFY_TOKEN", "wasapeame_verify_2026")
 
 
-def meta_send(to, body, media_id=None):
+def meta_send(to, body, media_id=None, media_type="image"):
     phone = to.replace("whatsapp:+", "").replace("+", "").strip()
     url = f"https://graph.facebook.com/v19.0/{META_PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {META_ACCESS_TOKEN}",
         "Content-Type": "application/json"
     }
-    if media_id:
+    if media_id and media_type == "audio":
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "audio",
+            "audio": {"id": media_id}
+        }
+    elif media_id:
         payload = {
             "messaging_product": "whatsapp",
             "to": phone,
@@ -218,8 +227,11 @@ def webhook():
             elif msg_type == "image":
                 media_id = msg_obj["image"]["id"]
                 body_raw = msg_obj["image"].get("caption", "")
+            elif msg_type == "audio":
+                media_id = msg_obj["audio"]["id"]
+                body_raw = "__audio__"
             else:
-                # Tipo no soportado (audio, sticker, etc.) — ignorar silenciosamente
+                # Tipo no soportado (sticker, etc.) — ignorar silenciosamente
                 return jsonify({"status": "ok"}), 200
         except (KeyError, IndexError):
             return jsonify({"status": "ok"}), 200
@@ -253,6 +265,15 @@ def webhook():
                 (re.match(r"^admin\s+", mensaje_lower) and modo_emisor != "citas")
                 or (modo_emisor != "citas" and tiene_sesion_admin_citas(numero_cliente))
             )
+            # Audio de médico → transcripción + historia clínica
+            if modo_emisor == "citas" and mensaje == "__audio__" and media_id:
+                resultado = procesar_nota_voz_medica(media_id, neg_emisor, meta_send, numero_cliente)
+                if resultado:
+                    _enviar(resultado, numero_cliente)
+                    guardar_transcripcion_pendiente(numero_cliente, resultado)
+                    meta_send(numero_cliente, "¿Enviar esto a un paciente? Escribe su numero (ej: 8091234567) o *no*.")
+                return jsonify({"status": "ok"}), 200
+
             if not codigo_en_msg and _es_comando_negocio(mensaje_lower, modo_emisor) and not es_admin_pin_citas:
                 if mensaje_lower.strip() == "ayuda":
                     meta_send(numero_cliente, respuesta_ayuda(modo_emisor))

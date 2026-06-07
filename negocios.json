@@ -206,31 +206,265 @@
       "numero_negocio": "whatsapp:+18298192919",
       "pin": "7391",
       "servicios": {
-        "asesoria_presencial":           {"nombre": "Asesoría Presencial",                         "duracion_minutos": 60, "precio": 2500, "activo": true},
-        "asesoria_online":               {"nombre": "Asesoría Online",                             "duracion_minutos": 60, "precio": 2000, "activo": true},
-        "constitucion_empresa":          {"nombre": "Constitución de empresa",                     "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "registro_empresa_extranjera":   {"nombre": "Registro de empresa extranjera",              "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "renovacion_registro_mercantil": {"nombre": "Renovación de Registro Mercantil",            "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "registro_marca":                {"nombre": "Registro de Marca / Logo / Lema",             "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "registro_sanitario":            {"nombre": "Registro Sanitario / Habilitación Sanitaria", "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "tramites_migratorios":          {"nombre": "Trámites migratorios (RT-3, RT-9)",           "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "renovacion_residencia_rt9":     {"nombre": "Renovación de residencia RT-9",               "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "cambio_categoria_migratoria":   {"nombre": "Cambio de categoría migratoria",              "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "adhesion_pnv_menores":          {"nombre": "Adhesión PNV menores de edad",                "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "renovacion_permiso_tt1":        {"nombre": "Renovación permiso TT-1",                     "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "homologacion_licencia":         {"nombre": "Homologación de licencia extranjera",         "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "licencia_venezolana":           {"nombre": "Licencia venezolana renovación y emisión",    "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "visas_rd":                      {"nombre": "Visas RD turismo residencia laboral",         "duracion_minutos": 60, "precio": 0,    "activo": true},
-        "visa_turismo_venezuela":        {"nombre": "Visa turismo Venezuela",                      "duracion_minutos": 60, "precio": 0,    "activo": true}
+        "asesoria_presencial": {
+          "nombre": "Asesoría Presencial",
+          "duracion_minutos": 60,
+          "precio": 2500,
+          "activo": true
+        },
+        "asesoria_online": {
+          "nombre": "Asesoría Online",
+          "duracion_minutos": 60,
+          "precio": 2000,
+          "activo": true
+        },
+        "constitucion_empresa": {
+          "nombre": "Constitución de empresa",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "registro_empresa_extranjera": {
+          "nombre": "Registro de empresa extranjera",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "renovacion_registro_mercantil": {
+          "nombre": "Renovación de Registro Mercantil",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "registro_marca": {
+          "nombre": "Registro de Marca / Logo / Lema",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "registro_sanitario": {
+          "nombre": "Registro Sanitario / Habilitación Sanitaria",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "tramites_migratorios": {
+          "nombre": "Trámites migratorios (RT-3, RT-9)",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "renovacion_residencia_rt9": {
+          "nombre": "Renovación de residencia RT-9",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "cambio_categoria_migratoria": {
+          "nombre": "Cambio de categoría migratoria",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "adhesion_pnv_menores": {
+          "nombre": "Adhesión PNV menores de edad",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "renovacion_permiso_tt1": {
+          "nombre": "Renovación permiso TT-1",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "homologacion_licencia": {
+          "nombre": "Homologación de licencia extranjera",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "licencia_venezolana": {
+          "nombre": "Licencia venezolana renovación y emisión",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "visas_rd": {
+          "nombre": "Visas RD turismo residencia laboral",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "visa_turismo_venezuela": {
+          "nombre": "Visa turismo Venezuela",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        }
       },
       "horario": {
-        "lunes":     {"trabaja": true,  "inicio": "09:00", "fin": "18:00"},
-        "martes":    {"trabaja": true,  "inicio": "09:00", "fin": "18:00"},
-        "miercoles": {"trabaja": true,  "inicio": "09:00", "fin": "18:00"},
-        "jueves":    {"trabaja": true,  "inicio": "09:00", "fin": "18:00"},
-        "viernes":   {"trabaja": true,  "inicio": "09:00", "fin": "18:00"},
-        "sabado":    {"trabaja": false, "inicio": null,    "fin": null},
-        "domingo":   {"trabaja": false, "inicio": null,    "fin": null}
+        "lunes": {
+          "trabaja": true,
+          "inicio": "09:00",
+          "fin": "18:00"
+        },
+        "martes": {
+          "trabaja": true,
+          "inicio": "09:00",
+          "fin": "18:00"
+        },
+        "miercoles": {
+          "trabaja": true,
+          "inicio": "09:00",
+          "fin": "18:00"
+        },
+        "jueves": {
+          "trabaja": true,
+          "inicio": "09:00",
+          "fin": "18:00"
+        },
+        "viernes": {
+          "trabaja": true,
+          "inicio": "09:00",
+          "fin": "18:00"
+        },
+        "sabado": {
+          "trabaja": false,
+          "inicio": null,
+          "fin": null
+        },
+        "domingo": {
+          "trabaja": false,
+          "inicio": null,
+          "fin": null
+        }
+      },
+      "citas": [],
+      "bloqueos": []
+    },
+    "ME2": {
+      "nombre": "Dr. Feris Olivero — Nutriología Clínica",
+      "descripcion": "Nutriología Clínica, Obesología, Dietética y Diabetes. Onconutrición. Atención en One Clínic Group, El Millón, Santo Domingo.",
+      "modo": "citas",
+      "tipo": "ME",
+      "activo": true,
+      "numero_negocio": "whatsapp:+18096025206",
+      "pin": "2320",
+      "requiere_comprobante": false,
+      "instrucciones_pago": null,
+      "costo_online": 0,
+      "costo_presencial": 0,
+      "servicios": {
+        "reprogramacion_metabolica": {
+          "nombre": "Reprogramación Metabólica e Inmunología Tumoral",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "inmunonutricion": {
+          "nombre": "InmunoNutrición",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "diagnostico_nutricional_oncologia": {
+          "nombre": "Diagnóstico nutricional y monitoreo en Oncología (adulto y pediátrica)",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "soporte_metabolico_oncologia": {
+          "nombre": "Soporte Metabólico Nutricional en Oncología (adulto y pediátrica)",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "diagnostico_macro_micro": {
+          "nombre": "Diagnóstico nutricional y requerimientos macro/micronutrientes en adulto con Cáncer",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "soporte_oncologico_critico": {
+          "nombre": "Soporte Metabólico Nutricional en pacientes oncológicos en estado crítico",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "consulta_nutricion_clinica": {
+          "nombre": "Consulta y asesoría en nutrición clínica y dietoterapia (adultos y niños)",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "programa_bienestar": {
+          "nombre": "Programa de bienestar (nutrición + actividad física)",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "programa_atletas": {
+          "nombre": "Programa especializado para atletas de alto rendimiento y amateurs",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "programa_alto_riesgo": {
+          "nombre": "Programa especializado para pacientes de alto riesgo",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "seguimiento_ajustes": {
+          "nombre": "Seguimiento y ajustes según evolución del paciente",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        },
+        "acompanamiento_bariatrico": {
+          "nombre": "Acompañamiento nutricional en cirugías de obesidad (bariátricos)",
+          "duracion_minutos": 60,
+          "precio": 0,
+          "activo": true
+        }
+      },
+      "horario": {
+        "lunes": {
+          "trabaja": true,
+          "inicio": "08:00",
+          "fin": "19:00"
+        },
+        "martes": {
+          "trabaja": true,
+          "inicio": "08:00",
+          "fin": "19:00"
+        },
+        "miercoles": {
+          "trabaja": true,
+          "inicio": "08:00",
+          "fin": "19:00"
+        },
+        "jueves": {
+          "trabaja": true,
+          "inicio": "08:00",
+          "fin": "19:00"
+        },
+        "viernes": {
+          "trabaja": true,
+          "inicio": "08:00",
+          "fin": "12:00"
+        },
+        "sabado": {
+          "trabaja": false,
+          "inicio": null,
+          "fin": null
+        },
+        "domingo": {
+          "trabaja": false,
+          "inicio": null,
+          "fin": null
+        }
       },
       "citas": [],
       "bloqueos": []

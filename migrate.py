@@ -319,6 +319,22 @@ def migrate():
           ADD COLUMN IF NOT EXISTS fecha DATE DEFAULT CURRENT_DATE
     """)
 
+    # Columnas agregadas en sesión 2026-06-06 (ME2, transcripción médica, nota paciente)
+    cur.execute("""
+        ALTER TABLE conversaciones_citas
+          ADD COLUMN IF NOT EXISTS nota_paciente  TEXT,
+          ADD COLUMN IF NOT EXISTS nota_media_id  TEXT
+    """)
+    cur.execute("""
+        ALTER TABLE citas
+          ADD COLUMN IF NOT EXISTS nota_paciente  TEXT,
+          ADD COLUMN IF NOT EXISTS nota_media_id  TEXT
+    """)
+    cur.execute("""
+        ALTER TABLE sesiones_admin
+          ADD COLUMN IF NOT EXISTS transcripcion_pendiente TEXT
+    """)
+
     conn.commit()
     cur.close()
     conn.close()

@@ -38,6 +38,7 @@ def _horas_laborales_hasta(fecha_cita, hora_cita_str, negocio):
     return total_minutos / 60
 from google_calendar import get_google_tokens, crear_cita_con_meet, mensaje_confirmacion_virtual
 from asistente_ia import validar_comprobante
+from transcripcion_medica import procesar_nota_voz_paciente
 
 def _fmt_numero(numero):
     """whatsapp:+18298789906 → +1 829 878 9906"""
@@ -214,8 +215,8 @@ def _set_estado_cita(numero_cliente, data):
     execute("""
         INSERT INTO conversaciones_citas
             (numero_cliente, codigo, estado, servicio_clave, dia, nombre_dia, hora, tipo, lugar,
-             cliente_nombre, cliente_email)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             cliente_nombre, cliente_email, nota_paciente, nota_media_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (numero_cliente) DO UPDATE SET
             codigo         = EXCLUDED.codigo,
             estado         = EXCLUDED.estado,
@@ -227,6 +228,8 @@ def _set_estado_cita(numero_cliente, data):
             lugar          = EXCLUDED.lugar,
             cliente_nombre = EXCLUDED.cliente_nombre,
             cliente_email  = EXCLUDED.cliente_email,
+            nota_paciente  = EXCLUDED.nota_paciente,
+            nota_media_id  = EXCLUDED.nota_media_id,
             actualizado_en = NOW()
     """, (
         numero_cliente,
@@ -240,6 +243,8 @@ def _set_estado_cita(numero_cliente, data):
         data.get("lugar"),
         data.get("cliente_nombre"),
         data.get("cliente_email"),
+        data.get("nota_paciente"),
+        data.get("nota_media_id"),
     ))
 
 def _del_estado_cita(numero_cliente):
@@ -617,6 +622,12 @@ def _set_sesion_admin(numero, codigo, preguntando_numero_principal=False):
             expira                     = EXCLUDED.expira,
             preguntando_numero_principal = EXCLUDED.preguntando_numero_principal
     """, (numero, codigo, preguntando_numero_principal))
+
+def guardar_transcripcion_pendiente(numero, texto):
+    execute(
+        "UPDATE sesiones_admin SET transcripcion_pendiente = %s WHERE numero = %s",
+        (texto, numero)
+    )
 
 def _update_preguntando(numero, value):
     execute(
@@ -1023,19 +1034,22 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
     execute("""
         INSERT INTO citas
             (codigo, numero_cliente, servicio, nombre_servicio, fecha, hora,
-             duracion_minutos, estado, tipo, lugar, agendado_en, recordatorio_enviado)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'confirmada', %s, %s, NOW(), FALSE)
+             duracion_minutos, estado, tipo, lugar, agendado_en, recordatorio_enviado,
+             nota_paciente, nota_media_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'confirmada', %s, %s, NOW(), FALSE, %s, %s)
     """, (
         codigo, numero_cliente, estado["servicio_clave"], servicio["nombre"],
         fecha_dt, estado["hora"], servicio["duracion_minutos"],
         estado.get("tipo"), estado.get("lugar"),
+        estado.get("nota_paciente"), estado.get("nota_media_id"),
     ))
 
-    tipo_txt  = ("Online (Google Meet)" if estado.get("tipo") == "online"
-                 else "Presencial" if estado.get("tipo") == "presencial"
-                 else None)
+    tipo_txt   = ("Online (Google Meet)" if estado.get("tipo") == "online"
+                  else "Presencial" if estado.get("tipo") == "presencial"
+                  else None)
     tipo_linea = f"Tipo:     {tipo_txt}\n" if tipo_txt else ""
     lugar_txt  = f"Lugar:    {estado['lugar']}\n" if estado.get("lugar") else ""
+    nota_txt   = f"Nota:     {estado['nota_paciente']}\n" if estado.get("nota_paciente") else ""
     twilio_send(
         negocio["numero_negocio"],
         f"NUEVA CITA\n\n"
@@ -1043,8 +1057,11 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
         f"{tipo_linea}"
         f"{lugar_txt}"
         f"Dia:      {estado['nombre_dia']} — {_fmt12(estado['hora'])}\n"
-        f"Cliente:  {numero_cliente}"
+        f"Cliente:  {numero_cliente}\n"
+        f"{nota_txt}"
     )
+    if estado.get("nota_media_id"):
+        twilio_send(negocio["numero_negocio"], "Nota de voz del paciente:", media_id=estado["nota_media_id"], media_type="audio")
 
     # Google Calendar
     meet_link = None
@@ -1301,8 +1318,18 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                 "2. Corregir nombre\n"
                 "3. Corregir email"
             )
-        # Datos confirmados → guardar para futuras citas y mostrar resumen
+        # Datos confirmados → guardar para futuras citas
         _guardar_datos_cliente(numero_cliente, estado["cliente_nombre"], estado["cliente_email"])
+        # Negocios ME piden una nota clínica breve antes de confirmar
+        if negocio.get("tipo") == "ME":
+            estado["estado"] = "esperando_nota"
+            _set_estado_cita(numero_cliente, estado)
+            return (
+                "Antes de confirmar, puedes dejarle una nota al doctor:\n\n"
+                "Describe brevemente el motivo de tu consulta, síntomas o cualquier información relevante.\n\n"
+                "También puedes enviar una *nota de voz*.\n\n"
+                "Escribe *saltar* si prefieres no dejar nota."
+            )
         estado["estado"] = "confirmando"
         _set_estado_cita(numero_cliente, estado)
 
@@ -1324,6 +1351,37 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
         r += f"Dia:      {estado['nombre_dia']}\n"
         r += f"Hora:     {_fmt12(estado['hora'])}\n"
         r += "\nEscribe *si* para continuar o *cancelar* para salir."
+        return r
+
+    # ── ESPERANDO NOTA (solo ME) ──
+    if s == "esperando_nota":
+        if mensaje.strip().lower() in ("saltar", "no", "skip"):
+            estado.update({"estado": "confirmando", "nota_paciente": None, "nota_media_id": None})
+        elif mensaje.strip() == "__audio__" and media_id:
+            texto = procesar_nota_voz_paciente(media_id)
+            estado.update({"estado": "confirmando", "nota_paciente": texto, "nota_media_id": media_id})
+        else:
+            estado.update({"estado": "confirmando", "nota_paciente": mensaje.strip(), "nota_media_id": None})
+        _set_estado_cita(numero_cliente, estado)
+
+        tipo = estado.get("tipo")
+        if tipo == "online":
+            costo = negocio.get("costo_online") or servicio["precio"]
+        elif tipo == "presencial":
+            costo = negocio.get("costo_presencial") or servicio["precio"]
+        else:
+            costo = servicio["precio"]
+
+        r  = "Resumen de tu cita:\n\n"
+        r += f"Negocio:  {negocio['nombre']}\n"
+        r += f"Nombre:   {estado['cliente_nombre']}\n"
+        r += f"Servicio: {servicio['nombre']}\n"
+        r += f"Duracion: {servicio['duracion_minutos']} min\n"
+        if costo:
+            r += f"Costo:    *${costo:,} DOP*\n"
+        r += f"Dia:      {estado['nombre_dia']}\n"
+        r += f"Hora:     {_fmt12(estado['hora'])}\n"
+        r += "\nEscribe *si* para confirmar o *cancelar* para salir."
         return r
 
     # ── CONFIRMANDO ──
@@ -1453,6 +1511,19 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
     codigo  = codigo_activo
     negocio = obtener_negocio(codigo)
     hoy     = date.today()
+
+    # ── respuesta a transcripción pendiente ──
+    sesion_dr = _get_sesion_admin(numero)
+    transcripcion_pendiente = sesion_dr.get("transcripcion_pendiente") if sesion_dr else None
+    if transcripcion_pendiente:
+        execute("UPDATE sesiones_admin SET transcripcion_pendiente = NULL WHERE numero = %s", (numero,))
+        if re.search(r"\b(no)\b", msg_low):
+            return "Ok, no se envio."
+        numero_destino = re.sub(r"\D", "", msg)
+        if len(numero_destino) >= 8:
+            twilio_send(f"+{numero_destino}", transcripcion_pendiente)
+            return f"Enviado a +{numero_destino}."
+        return "No entendi el numero. La transcripcion no fue enviada."
 
     # ── aprobar/rechazar reagendar / aprobar/rechazar reembolso ──
     m_apr = re.match(r"(aprobar|rechazar)\s+(reagendar|reembolso)\s+(\d+)", msg_low)
