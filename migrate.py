@@ -349,6 +349,14 @@ def migrate():
         ALTER TABLE sesiones_admin
           ADD COLUMN IF NOT EXISTS transcripcion_pendiente TEXT
     """)
+    cur.execute("""
+        ALTER TABLE negocios
+          ADD COLUMN IF NOT EXISTS categorias_info JSONB
+    """)
+    cur.execute("""
+        ALTER TABLE conversaciones_citas
+          ADD COLUMN IF NOT EXISTS categoria VARCHAR(100)
+    """)
 
     conn.commit()
     cur.close()

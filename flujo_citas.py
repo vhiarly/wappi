@@ -189,6 +189,13 @@ def _txt_servicios(negocio, tipo=None, categoria=None):
 
 
 def _categorias_del_negocio(negocio):
+    cats_info = negocio.get("categorias_info") or []
+    if cats_info and isinstance(cats_info, list):
+        activas = {
+            sv.get("categoria") for sv in negocio.get("servicios", {}).values()
+            if sv.get("activo", True) and sv.get("categoria")
+        }
+        return [c["n"] for c in cats_info if c.get("n") and c["n"] in activas]
     cats = set()
     for sv in negocio.get("servicios", {}).values():
         if sv.get("activo", True) and sv.get("categoria"):
@@ -200,7 +207,8 @@ def _enviar_lista_categorias(numero_cliente, negocio):
     cats = _categorias_del_negocio(negocio)
     if not cats:
         return False
-    filas = [(cat.lower(), cat, "") for cat in cats]
+    cats_desc = {c["n"]: c.get("d", "") for c in (negocio.get("categorias_info") or []) if c.get("n")}
+    filas = [(cat.lower(), cat, cats_desc.get(cat, "")) for cat in cats]
     return _enviar_lista(numero_cliente, "¿Qué tipo de servicio necesitas?", filas, "Ver categorías")
 
 
