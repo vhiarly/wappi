@@ -245,8 +245,8 @@ def _set_estado_cita(numero_cliente, data):
     execute("""
         INSERT INTO conversaciones_citas
             (numero_cliente, codigo, estado, servicio_clave, dia, nombre_dia, hora, tipo, lugar,
-             cliente_nombre, cliente_email, nota_paciente, nota_media_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             cliente_nombre, cliente_email, nota_paciente, nota_media_id, categoria)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (numero_cliente) DO UPDATE SET
             codigo         = EXCLUDED.codigo,
             estado         = EXCLUDED.estado,
@@ -260,6 +260,7 @@ def _set_estado_cita(numero_cliente, data):
             cliente_email  = EXCLUDED.cliente_email,
             nota_paciente  = EXCLUDED.nota_paciente,
             nota_media_id  = EXCLUDED.nota_media_id,
+            categoria      = EXCLUDED.categoria,
             actualizado_en = NOW()
     """, (
         numero_cliente,
@@ -275,6 +276,7 @@ def _set_estado_cita(numero_cliente, data):
         data.get("cliente_email"),
         data.get("nota_paciente"),
         data.get("nota_media_id"),
+        data.get("categoria"),
     ))
 
 def _del_estado_cita(numero_cliente):

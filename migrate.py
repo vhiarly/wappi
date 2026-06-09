@@ -330,6 +330,16 @@ def migrate():
           ADD COLUMN IF NOT EXISTS nota_paciente  TEXT,
           ADD COLUMN IF NOT EXISTS nota_media_id  TEXT
     """)
+
+    # Columnas agregadas en sesión 2026-06-09 (categorías servicios, catálogo)
+    cur.execute("""
+        ALTER TABLE conversaciones_citas
+          ADD COLUMN IF NOT EXISTS categoria VARCHAR(100)
+    """)
+    cur.execute("""
+        ALTER TABLE catalogo
+          ADD COLUMN IF NOT EXISTS categoria VARCHAR(100)
+    """)
     cur.execute("""
         ALTER TABLE citas
           ADD COLUMN IF NOT EXISTS nota_paciente  TEXT,
