@@ -3,8 +3,12 @@ import re
 import threading
 import time
 import unicodedata
+import hmac
+import hashlib
 import requests as http_requests
 from flask import Flask, request, g, make_response, render_template, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 from db import init_pool, execute
 from negocio_router import detectar_codigo, obtener_negocio, es_numero_negocio
@@ -29,6 +33,7 @@ execute("CREATE TABLE IF NOT EXISTS clientes (numero TEXT PRIMARY KEY, nombre TE
 execute("ALTER TABLE conversaciones_registro ADD COLUMN IF NOT EXISTS datos JSONB NOT NULL DEFAULT '{}'")
 
 app = Flask(__name__)
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
 app.register_blueprint(oauth_bp, url_prefix='/oauth')
 
 
@@ -202,7 +207,28 @@ def _enviar(texto, numero):
 
 
 # ── ÚNICO webhook ──────────────────────────────────────────────────────────────
+def _validate_webhook_signature(request_body, x_hub_signature):
+    """Valida que el request venga de Meta verificando la firma HMAC."""
+    if not x_hub_signature:
+        print("[SECURITY] Webhook sin X-Hub-Signature-256 header — rechazado")
+        return False
+
+    webhook_secret = os.getenv("META_WEBHOOK_SECRET", "wasapeame_webhook_secret_2026")
+    expected_signature = "sha256=" + hmac.new(
+        webhook_secret.encode(),
+        request_body,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(x_hub_signature, expected_signature):
+        print(f"[SECURITY] Webhook signature inválida — rechazado")
+        return False
+
+    return True
+
+
 @app.route("/webhook", methods=["GET", "POST"])
+@limiter.limit("10 per second")
 def webhook():
     # Verificación del webhook de Meta
     if request.method == "GET":
@@ -212,6 +238,11 @@ def webhook():
 
     # POST — procesar mensaje entrante
     try:
+        # Validar firma HMAC del webhook
+        x_hub_signature = request.headers.get("X-Hub-Signature-256", "")
+        if not _validate_webhook_signature(request.data, x_hub_signature):
+            return jsonify({"status": "invalid signature"}), 403
+
         data = request.get_json(silent=True) or {}
 
         # Extraer mensaje de la estructura de Meta Cloud API
