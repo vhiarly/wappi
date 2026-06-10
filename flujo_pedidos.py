@@ -1,10 +1,19 @@
 import os
 import re
+import json
 import requests as _req
 from datetime import date
 from psycopg2.extras import Json
 from db import execute
 from negocio_router import obtener_negocio
+
+# Fotos PA1 — clave → URL CDN
+_PA1_FOTOS_PATH = os.path.join(os.path.dirname(__file__), "pa1_fotos.json")
+try:
+    with open(_PA1_FOTOS_PATH) as _f:
+        _PA1_FOTOS = json.load(_f)
+except Exception:
+    _PA1_FOTOS = {}
 
 _CONFIRMAR = {"confirmar", "confirma", "si", "sí", "dale", "ok", "okay", "listo", "va", "adelante", "procede"}
 _CANCELAR  = {"cancelar", "cancel", "salir", "exit", "bye", "chao", "nada", "olvida", "adios", "adiós",
@@ -369,6 +378,28 @@ def _meta_interactive(numero_cliente, interactive_payload):
         return r.status_code == 200
     except Exception:
         return False
+
+
+def _enviar_foto(numero_cliente, clave, caption=""):
+    """Envía foto del producto si está disponible en pa1_fotos.json."""
+    url = _PA1_FOTOS.get(clave)
+    if not url:
+        return
+    token    = os.getenv("META_ACCESS_TOKEN")
+    phone_id = os.getenv("META_PHONE_NUMBER_ID")
+    if not token or not phone_id:
+        return
+    phone = numero_cliente.replace("+", "").strip()
+    payload = {"messaging_product": "whatsapp", "to": phone, "type": "image",
+               "image": {"link": url}}
+    if caption:
+        payload["image"]["caption"] = caption[:1024]
+    try:
+        _req.post(f"https://graph.facebook.com/v19.0/{phone_id}/messages",
+                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                  json=payload, timeout=10)
+    except Exception:
+        pass
 
 
 def _enviar_botones(numero_cliente, texto, botones):
@@ -765,6 +796,20 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
 
     # ── ESPERANDO CATEGORÍA (navegando el menú interactivo) ──
     if s == "esperando_categoria":
+        # Botón "Ver más" → volver a categorías
+        if msg == "seguir_comprando":
+            _enviar_categorias(numero_cliente, negocio)
+            return None
+
+        # Botón "Confirmar" → saltar a confirmación
+        if msg == "confirmar_pedido":
+            if not items:
+                _enviar_categorias(numero_cliente, negocio)
+                return None
+            estado["estado"] = "esperando_confirmacion"
+            _set_estado(numero_cliente, estado)
+            return _resumen(items, "\n1. Confirmar pedido\n0. Cancelar")
+
         # Confirmar
         if any(re.search(r"\b" + p + r"\b", msg) for p in _CONFIRMAR):
             if not items:
@@ -781,7 +826,18 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                 None
             )
             if cat_name:
-                _enviar_productos_cat(numero_cliente, negocio, cat_name)
+                ok = _enviar_productos_cat(numero_cliente, negocio, cat_name)
+                if not ok:
+                    # Fallback texto si la lista interactiva falla
+                    catalogo = negocio.get("catalogo", {})
+                    prods = [(cl, p) for cl, p in catalogo.items()
+                             if p.get("activo", True) and p.get("categoria") == cat_name]
+                    lineas = [f"*{cat_name}*\n"]
+                    for i, (cl, p) in enumerate(prods, 1):
+                        precio = f"RD${p['precio']:.0f}" if p['precio'] > 0 else "precio al consultar"
+                        lineas.append(f"{i}. {p['nombre']} — {precio}")
+                    lineas.append("\nEscribe el nombre del producto:")
+                    return "\n".join(lineas)
                 return None
 
         # Selección de producto por clave (reply de lista interactiva)
@@ -796,9 +852,11 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             items.append(item)
             estado["items"] = items
             _set_estado(numero_cliente, estado)
-            return (f"✅ *{prod_sel['nombre']}* agregado.\n\n"
-                    + _resumen(items)
-                    + "\n\nEscribe *menú* para ver más o *confirmar* para ordenar.")
+            _enviar_foto(numero_cliente, msg)
+            _enviar_botones(numero_cliente,
+                f"✅ *{prod_sel['nombre']}* agregado.\n\n" + _resumen(items),
+                [("seguir_comprando", "🛍️ Ver más"), ("confirmar_pedido", "✅ Confirmar")])
+            return None
 
         # Cualquier otra cosa → re-mostrar categorías
         _enviar_categorias(numero_cliente, negocio)
