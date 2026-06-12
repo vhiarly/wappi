@@ -59,7 +59,7 @@ def dashboard(codigo):
     if not negocio:
         return "Negocio no encontrado", 404
 
-    return render_template('cliente/dashboard.html', codigo=codigo, negocio_nombre=negocio[0], modo=negocio[1])
+    return render_template('cliente/dashboard.html', codigo=codigo, negocio_nombre=negocio['nombre'], modo=negocio['modo'])
 
 
 @cliente_bp.route('/api/stats')
@@ -71,8 +71,8 @@ def api_stats(codigo):
         (codigo,),
         fetch='one'
     )
-    if result and result[0]:
-        return jsonify(json.loads(result[0]))
+    if result and result['stats']:
+        return jsonify(json.loads(result['stats']))
     return jsonify({"error": "Sin datos aún"}), 404
 
 
@@ -90,11 +90,11 @@ def api_pedidos(codigo):
     result = []
     for p in activos or []:
         result.append({
-            "numero": p[0],
-            "estado": p[1],
-            "items": json.loads(p[2]) if p[2] else [],
-            "total": float(p[3]) if p[3] else 0,
-            "actualizado": str(p[4]),
+            "numero": p.get('numero_cliente') if isinstance(p, dict) else p[0],
+            "estado": p.get('estado') if isinstance(p, dict) else p[1],
+            "items": json.loads(p.get('items')) if p.get('items') else [],
+            "total": float(p.get('total')) if p.get('total') else 0,
+            "actualizado": str(p.get('actualizado_en')),
             "tipo": "activo"
         })
 
