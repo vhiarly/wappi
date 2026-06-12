@@ -26,9 +26,17 @@ CREATE TABLE IF NOT EXISTS negocios (
     activo                BOOLEAN      NOT NULL DEFAULT TRUE,
     requiere_comprobante  BOOLEAN      NOT NULL DEFAULT FALSE,
     instrucciones_pago    TEXT         NOT NULL DEFAULT '',
+    palabra_clave         VARCHAR(100),
+    descripcion           TEXT,
+    lugares_reunion       JSONB,
+    costo_online          NUMERIC(10,2),
+    costo_presencial      NUMERIC(10,2),
+    test_mode             BOOLEAN      DEFAULT FALSE,
+    categorias_info       JSONB,
+    solo_retiro           BOOLEAN      DEFAULT FALSE,
     google_access_token   TEXT,
     google_refresh_token  TEXT,
-    google_expiry        TIMESTAMPTZ
+    google_expiry         TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS catalogo (
@@ -41,6 +49,7 @@ CREATE TABLE IF NOT EXISTS catalogo (
     rebanado  BOOLEAN       NOT NULL DEFAULT FALSE,
     activo    BOOLEAN       NOT NULL DEFAULT TRUE,
     cantidad  INT           NOT NULL DEFAULT 1,
+    categoria VARCHAR(100),
     UNIQUE (codigo, clave)
 );
 
