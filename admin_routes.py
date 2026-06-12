@@ -67,8 +67,8 @@ def api_stats():
         ('GLOBAL',),
         fetch='one'
     )
-    if result and result[0]:
-        return jsonify(json.loads(result[0]))
+    if result and result['stats']:
+        return jsonify(json.loads(result['stats']))
     return jsonify({"error": "Sin datos aún"}), 404
 
 
@@ -83,17 +83,20 @@ def api_negocios():
 
     result = []
     for neg in negocios or []:
-        codigo, nombre, tipo, modo, numero, activo = neg
+        codigo = neg['codigo']
+        nombre = neg['nombre']
+        tipo = neg['tipo']
+        modo = neg['modo']
+        numero = neg['numero_negocio']
+        activo = neg['activo']
 
-        # Stats del negocio
         stats = execute(
             "SELECT stats FROM dashboard_stats WHERE codigo = %s",
             (codigo,),
             fetch='one'
         )
-        stats_data = json.loads(stats[0]) if stats and stats[0] else {}
+        stats_data = json.loads(stats['stats']) if stats and stats['stats'] else {}
 
-        # Último mensaje
         ultimo_msg = execute(
             "SELECT actualizado_en FROM conversaciones_pedidos WHERE codigo = %s ORDER BY actualizado_en DESC LIMIT 1",
             (codigo,),
@@ -114,7 +117,7 @@ def api_negocios():
             "numero": numero,
             "activo": activo,
             "stats": stats_data,
-            "ultimo_mensaje": str(ultimo_msg[0]) if ultimo_msg else "N/A",
+            "ultimo_mensaje": str(ultimo_msg['actualizado_en']) if ultimo_msg else "N/A",
         })
 
     return jsonify(result)
@@ -132,12 +135,12 @@ def api_alertas():
     result = []
     for alerta in alertas or []:
         result.append({
-            "id": alerta[0],
-            "codigo": alerta[1],
-            "tipo": alerta[2],
-            "descripcion": alerta[3],
-            "detalle": json.loads(alerta[4]) if alerta[4] else {},
-            "creado_en": str(alerta[5]),
+            "id": alerta['id'],
+            "codigo": alerta['codigo'],
+            "tipo": alerta['tipo'],
+            "descripcion": alerta['descripcion'],
+            "detalle": json.loads(alerta['detalle']) if alerta['detalle'] else {},
+            "creado_en": str(alerta['creado_en']),
         })
 
     return jsonify(result)
@@ -162,7 +165,6 @@ def api_notificar(codigo):
     if not mensaje:
         return jsonify({"error": "Mensaje vacío"}), 400
 
-    # Obtener número del negocio
     negocio = execute(
         "SELECT numero_negocio FROM negocios WHERE codigo = %s",
         (codigo,),
@@ -171,10 +173,9 @@ def api_notificar(codigo):
     if not negocio:
         return jsonify({"error": "Negocio no encontrado"}), 404
 
-    # Meta_send se importa dinámicamente desde app.py para evitar circular import
     try:
         from app import meta_send
-        meta_send(f"whatsapp:+{negocio[0]}", mensaje)
+        meta_send(f"whatsapp:+{negocio['numero_negocio']}", mensaje)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
