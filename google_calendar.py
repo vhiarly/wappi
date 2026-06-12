@@ -31,9 +31,9 @@ def load_env(path=".env"):
 
 load_env()
 
-GOOGLE_CLIENT_ID     = os.environ["GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-GOOGLE_REDIRECT_URI  = os.environ["GOOGLE_REDIRECT_URI"]
+GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI  = os.getenv("GOOGLE_REDIRECT_URI")
 DATABASE_URL         = os.environ["DATABASE_URL"]
 
 SCOPES = [
