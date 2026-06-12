@@ -611,5 +611,19 @@ def agents_api_limpiar():
     return jsonify({"mensaje": "Listo — todo limpiado"})
 
 
+@app.route("/init")
+def init_db():
+    """Run migrations and seed data"""
+    try:
+        import subprocess
+        result = subprocess.run(["python", "migrate.py"], capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            return jsonify({"mensaje": "Migrations completadas exitosamente"}), 200
+        else:
+            return jsonify({"error": result.stderr}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=3000)
