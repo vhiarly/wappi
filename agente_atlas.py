@@ -37,7 +37,6 @@ def calcular_stats_negocio(codigo):
         "servicio_top": None,
     }
 
-    # Ingresos + stats de pedidos
     result = execute("""
         SELECT
             COUNT(*) as pedidos_hoy,
@@ -47,32 +46,29 @@ def calcular_stats_negocio(codigo):
         WHERE codigo = %s AND DATE(creado_en) = %s AND estado != 'cancelado'
     """, (codigo, hoy), fetch='one')
 
-    if result and result[0]:
-        stats["pedidos_hoy"] = result[0] or 0
-        stats["ingresos_hoy"] = float(result[1]) if result[1] else 0
-        stats["ticket_promedio"] = float(result[2]) if result[2] else 0
+    if result and result.get('pedidos_hoy'):
+        stats["pedidos_hoy"] = result.get('pedidos_hoy') or 0
+        stats["ingresos_hoy"] = float(result.get('ingresos_hoy')) if result.get('ingresos_hoy') else 0
+        stats["ticket_promedio"] = float(result.get('ticket_promedio')) if result.get('ticket_promedio') else 0
 
-    # Ingresos mes
     result = execute("""
-        SELECT SUM(total)
+        SELECT SUM(total) as ingresos_mes
         FROM pedidos
         WHERE codigo = %s AND DATE(creado_en) >= %s AND estado != 'cancelado'
     """, (codigo, primer_dia_mes), fetch='one')
 
-    if result and result[0]:
-        stats["ingresos_mes"] = float(result[0]) if result[0] else 0
+    if result and result.get('ingresos_mes'):
+        stats["ingresos_mes"] = float(result.get('ingresos_mes')) if result.get('ingresos_mes') else 0
 
-    # Citas hoy
     result = execute("""
-        SELECT COUNT(*)
+        SELECT COUNT(*) as citas_hoy
         FROM citas
         WHERE codigo = %s AND fecha = %s AND estado IN ('confirmada', 'completada')
     """, (codigo, hoy), fetch='one')
 
     if result:
-        stats["citas_hoy"] = result[0] or 0
+        stats["citas_hoy"] = result.get('citas_hoy') or 0
 
-    # Clientes nuevos vs repetidos (últimos 30 días)
     hace_30 = hoy - timedelta(days=30)
 
     result = execute("""
@@ -84,10 +80,9 @@ def calcular_stats_negocio(codigo):
     """, (hace_30, hace_30, codigo), fetch='one')
 
     if result:
-        stats["clientes_nuevos"] = result[0] or 0
-        stats["clientes_repetidos"] = result[1] or 0
+        stats["clientes_nuevos"] = result.get('nuevos') or 0
+        stats["clientes_repetidos"] = result.get('repetidos') or 0
 
-    # Producto top
     result = execute("""
         SELECT clave, nombre
         FROM catalogo
@@ -97,9 +92,8 @@ def calcular_stats_negocio(codigo):
     """, (codigo,), fetch='one')
 
     if result:
-        stats["producto_top"] = {"clave": result[0], "nombre": result[1]}
+        stats["producto_top"] = {"clave": result.get('clave'), "nombre": result.get('nombre')}
 
-    # Servicio top
     result = execute("""
         SELECT clave, nombre
         FROM servicios
@@ -109,7 +103,7 @@ def calcular_stats_negocio(codigo):
     """, (codigo,), fetch='one')
 
     if result:
-        stats["servicio_top"] = {"clave": result[0], "nombre": result[1]}
+        stats["servicio_top"] = {"clave": result.get('clave'), "nombre": result.get('nombre')}
 
     return stats
 
@@ -137,67 +131,60 @@ def calcular_stats_global():
         "citas_activas": 0,
     }
 
-    # Ingresos global hoy
     result = execute("""
-        SELECT SUM(total)
+        SELECT SUM(total) as ingresos_hoy
         FROM pedidos
         WHERE DATE(creado_en) = %s AND estado != 'cancelado'
     """, (hoy,), fetch='one')
 
-    if result and result[0]:
-        stats["ingresos_hoy"] = float(result[0]) if result[0] else 0
+    if result and result.get('ingresos_hoy'):
+        stats["ingresos_hoy"] = float(result.get('ingresos_hoy')) if result.get('ingresos_hoy') else 0
 
-    # Ingresos global mes
     result = execute("""
-        SELECT SUM(total)
+        SELECT SUM(total) as ingresos_mes
         FROM pedidos
         WHERE DATE(creado_en) >= %s AND estado != 'cancelado'
     """, (primer_dia_mes,), fetch='one')
 
-    if result and result[0]:
-        stats["ingresos_mes"] = float(result[0]) if result[0] else 0
+    if result and result.get('ingresos_mes'):
+        stats["ingresos_mes"] = float(result.get('ingresos_mes')) if result.get('ingresos_mes') else 0
 
-    # Negocios activos
     result = execute("""
-        SELECT COUNT(*) FROM negocios WHERE activo = TRUE
+        SELECT COUNT(*) as negocios_activos FROM negocios WHERE activo = TRUE
     """, fetch='one')
 
     if result:
-        stats["negocios_activos"] = result[0] or 0
+        stats["negocios_activos"] = result.get('negocios_activos') or 0
 
-    # Conversaciones en curso
     result = execute("""
         SELECT
             (SELECT COUNT(*) FROM conversaciones_pedidos) +
-            (SELECT COUNT(*) FROM conversaciones_citas)
+            (SELECT COUNT(*) FROM conversaciones_citas) as total
     """, fetch='one')
 
     if result:
-        stats["conversaciones_totales"] = result[0] or 0
+        stats["conversaciones_totales"] = result.get('total') or 0
 
-    # Alertas abiertas
     result = execute("""
-        SELECT COUNT(*) FROM imprevistos WHERE estado = 'abierto'
+        SELECT COUNT(*) as alertas_abiertas FROM imprevistos WHERE estado = 'abierto'
     """, fetch='one')
 
     if result:
-        stats["alertas_abiertas"] = result[0] or 0
+        stats["alertas_abiertas"] = result.get('alertas_abiertas') or 0
 
-    # Pedidos pendientes
     result = execute("""
-        SELECT COUNT(*) FROM conversaciones_pedidos
+        SELECT COUNT(*) as pedidos_activos FROM conversaciones_pedidos
     """, fetch='one')
 
     if result:
-        stats["pedidos_activos"] = result[0] or 0
+        stats["pedidos_activos"] = result.get('pedidos_activos') or 0
 
-    # Citas pendientes
     result = execute("""
-        SELECT COUNT(*) FROM conversaciones_citas
+        SELECT COUNT(*) as citas_activas FROM conversaciones_citas
     """, fetch='one')
 
     if result:
-        stats["citas_activas"] = result[0] or 0
+        stats["citas_activas"] = result.get('citas_activas') or 0
 
     return stats
 
@@ -218,15 +205,13 @@ def ejecutar_atlas():
     try:
         print(f"[ATLAS] Calculando estadísticas... ({datetime.now().isoformat()})")
 
-        # Global
         stats_global = calcular_stats_global()
         guardar_stats(stats_global)
 
-        # Por negocio
         result = execute("SELECT codigo FROM negocios WHERE activo = TRUE", fetch='all')
         if result:
             for row in result:
-                codigo = row[0]
+                codigo = row.get('codigo')
                 stats = calcular_stats_negocio(codigo)
                 guardar_stats(stats)
 
@@ -238,7 +223,7 @@ def ejecutar_atlas():
 def daemon_atlas():
     """Daemon que corre ATLAS cada INTERVALO_SEGUNDOS"""
     print(f"[ATLAS] Iniciando daemon (intervalo: {INTERVALO_SEGUNDOS}s)")
-    ejecutar_atlas()  # Primera ejecución inmediata
+    ejecutar_atlas()
 
     while True:
         time.sleep(INTERVALO_SEGUNDOS)
