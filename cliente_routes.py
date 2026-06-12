@@ -80,7 +80,6 @@ def api_stats(codigo):
 @require_cliente
 def api_pedidos(codigo):
     """JSON: Pedidos activos + recientes"""
-    # Activos
     activos = execute(
         "SELECT numero_cliente, estado, items, total, actualizado_en FROM conversaciones_pedidos WHERE codigo = %s ORDER BY actualizado_en DESC LIMIT 10",
         (codigo,),
@@ -90,15 +89,14 @@ def api_pedidos(codigo):
     result = []
     for p in activos or []:
         result.append({
-            "numero": p.get('numero_cliente') if isinstance(p, dict) else p[0],
-            "estado": p.get('estado') if isinstance(p, dict) else p[1],
-            "items": json.loads(p.get('items')) if p.get('items') else [],
-            "total": float(p.get('total')) if p.get('total') else 0,
-            "actualizado": str(p.get('actualizado_en')),
+            "numero": p['numero_cliente'],
+            "estado": p['estado'],
+            "items": json.loads(p['items']) if p['items'] else [],
+            "total": float(p['total']) if p['total'] else 0,
+            "actualizado": str(p['actualizado_en']),
             "tipo": "activo"
         })
 
-    # Recientes
     recientes = execute(
         "SELECT numero_cliente, estado, items, total, creado_en FROM pedidos WHERE codigo = %s ORDER BY creado_en DESC LIMIT 20",
         (codigo,),
@@ -107,11 +105,11 @@ def api_pedidos(codigo):
 
     for p in recientes or []:
         result.append({
-            "numero": p[0],
-            "estado": p[1],
-            "items": json.loads(p[2]) if p[2] else [],
-            "total": float(p[3]) if p[3] else 0,
-            "creado": str(p[4]),
+            "numero": p['numero_cliente'],
+            "estado": p['estado'],
+            "items": json.loads(p['items']) if p['items'] else [],
+            "total": float(p['total']) if p['total'] else 0,
+            "creado": str(p['creado_en']),
             "tipo": "reciente"
         })
 
@@ -122,7 +120,6 @@ def api_pedidos(codigo):
 @require_cliente
 def api_citas(codigo):
     """JSON: Citas del día + próximas"""
-    # Activas
     activas = execute(
         "SELECT numero_cliente, servicio, dia, hora, actualizado_en FROM conversaciones_citas WHERE codigo = %s ORDER BY actualizado_en DESC LIMIT 10",
         (codigo,),
@@ -132,15 +129,14 @@ def api_citas(codigo):
     result = []
     for c in activas or []:
         result.append({
-            "numero": c[0],
-            "servicio": c[1],
-            "dia": c[2],
-            "hora": c[3],
-            "actualizado": str(c[4]),
+            "numero": c['numero_cliente'],
+            "servicio": c['servicio'],
+            "dia": c['dia'],
+            "hora": c['hora'],
+            "actualizado": str(c['actualizado_en']),
             "tipo": "activa"
         })
 
-    # Confirmadas
     confirmadas = execute(
         "SELECT numero_cliente, nombre_servicio, fecha, hora, estado, creado_en FROM citas WHERE codigo = %s ORDER BY fecha DESC LIMIT 20",
         (codigo,),
@@ -149,12 +145,12 @@ def api_citas(codigo):
 
     for c in confirmadas or []:
         result.append({
-            "numero": c[0],
-            "servicio": c[1],
-            "fecha": str(c[2]),
-            "hora": c[3],
-            "estado": c[4],
-            "creado": str(c[5]),
+            "numero": c['numero_cliente'],
+            "servicio": c['nombre_servicio'],
+            "fecha": str(c['fecha']),
+            "hora": c['hora'],
+            "estado": c['estado'],
+            "creado": str(c['creado_en']),
             "tipo": "confirmada"
         })
 
@@ -173,7 +169,7 @@ def api_catalogo(codigo):
     if not negocio:
         return jsonify({"error": "Negocio no encontrado"}), 404
 
-    modo = negocio[0]
+    modo = negocio['modo']
 
     if modo == 'pedidos':
         items = execute(
@@ -182,12 +178,12 @@ def api_catalogo(codigo):
             fetch='all'
         )
         return jsonify([{
-            "id": i[0],
-            "nombre": i[1],
-            "precio": float(i[2]),
-            "unidad": i[3],
-            "cantidad": i[4],
-            "activo": i[5]
+            "id": i['id'],
+            "nombre": i['nombre'],
+            "precio": float(i['precio']),
+            "unidad": i['unidad'],
+            "cantidad": i['cantidad'],
+            "activo": i['activo']
         } for i in items or []])
     else:
         items = execute(
@@ -196,11 +192,11 @@ def api_catalogo(codigo):
             fetch='all'
         )
         return jsonify([{
-            "id": i[0],
-            "nombre": i[1],
-            "precio": float(i[2]),
-            "duracion": i[3],
-            "activo": i[4]
+            "id": i['id'],
+            "nombre": i['nombre'],
+            "precio": float(i['precio']),
+            "duracion": i['duracion_minutos'],
+            "activo": i['activo']
         } for i in items or []])
 
 
@@ -221,7 +217,7 @@ def api_catalogo_update(codigo, item_id):
     if not negocio:
         return jsonify({"error": "Negocio no encontrado"}), 404
 
-    modo = negocio[0]
+    modo = negocio['modo']
 
     if modo == 'pedidos':
         if precio is not None:
@@ -249,13 +245,11 @@ def api_horarios(codigo):
         fetch='all'
     )
 
-    dias_orden = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-
     return jsonify([{
-        "dia": h[0],
-        "trabaja": h[1],
-        "inicio": h[2],
-        "fin": h[3]
+        "dia": h['dia'],
+        "trabaja": h['trabaja'],
+        "inicio": h['inicio'],
+        "fin": h['fin']
     } for h in horarios or []])
 
 
