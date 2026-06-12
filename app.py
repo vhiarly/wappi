@@ -625,5 +625,15 @@ def init_db():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/debug/negocios")
+def debug_negocios():
+    """Debug: show all negocios and their PINs"""
+    try:
+        negocios = execute("SELECT codigo, nombre, pin FROM negocios ORDER BY codigo", fetch='all')
+        return jsonify({"negocios": [{"codigo": n[0], "nombre": n[1], "pin": n[2]} for n in negocios]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=3000)
