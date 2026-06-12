@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wappi Admin — Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-gray-100">
+
+    <!-- Header -->
+    <div class="bg-slate-800 border-b border-slate-700 px-8 py-6">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold">Wappi Admin</h1>
+                <p class="text-gray-400 text-sm mt-1">Panel de control global</p>
+            </div>
+            <div>
+                <a href="/admin" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm">
+                    Salir
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-8">
+
+        <!-- Resumen Global -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                <div class="text-gray-400 text-sm font-medium">Ingresos Hoy</div>
+                <div class="text-3xl font-bold mt-2" id="ingresos-hoy">$0</div>
+            </div>
+            <div class="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                <div class="text-gray-400 text-sm font-medium">Ingresos Mes</div>
+                <div class="text-3xl font-bold mt-2" id="ingresos-mes">$0</div>
+            </div>
+            <div class="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                <div class="text-gray-400 text-sm font-medium">Negocios Activos</div>
+                <div class="text-3xl font-bold mt-2" id="negocios-activos">0</div>
+            </div>
+            <div class="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                <div class="text-gray-400 text-sm font-medium">Alertas Abiertas</div>
+                <div class="text-3xl font-bold mt-2 text-red-400" id="alertas-abiertas">0</div>
+            </div>
+        </div>
+
+        <!-- Alertas Críticas -->
+        <div class="bg-slate-800 rounded-lg p-6 border border-slate-700 mb-8">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <span class="text-red-500 mr-2">🔴</span>
+                Alertas Críticas
+            </h2>
+            <div id="alertas-list" class="space-y-3">
+                <p class="text-gray-400 text-sm">Cargando alertas...</p>
+            </div>
+        </div>
+
+        <!-- Negocios -->
+        <div class="bg-slate-800 rounded-lg p-6 border border-slate-700 mb-8">
+            <h2 class="text-xl font-bold mb-4">Negocios</h2>
+            <div id="negocios-list" class="space-y-3">
+                <p class="text-gray-400 text-sm">Cargando negocios...</p>
+            </div>
+        </div>
+
+        <!-- Agentes -->
+        <div class="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <h2 class="text-xl font-bold mb-4">Agentes Automáticos</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-slate-700 rounded p-4">
+                    <div class="flex items-center mb-2">
+                        <span class="text-green-400 mr-2">✅</span>
+                        <strong>Maverick</strong>
+                    </div>
+                    <p class="text-gray-400 text-sm">Monitoreo cada 5min: pedidos/citas atascadas, sesiones expiradas</p>
+                </div>
+                <div class="bg-slate-700 rounded p-4">
+                    <div class="flex items-center mb-2">
+                        <span class="text-green-400 mr-2">✅</span>
+                        <strong>Indiana</strong>
+                    </div>
+                    <p class="text-gray-400 text-sm">Onboarding automático: registra negocios por WhatsApp</p>
+                </div>
+                <div class="bg-slate-700 rounded p-4">
+                    <div class="flex items-center mb-2">
+                        <span class="text-green-400 mr-2">✅</span>
+                        <strong>ATLAS</strong>
+                    </div>
+                    <p class="text-gray-400 text-sm">Analytics cada hora: calcula stats de ingresos y clientes</p>
+                </div>
+                <div class="bg-slate-700 rounded p-4">
+                    <div class="flex items-center mb-2">
+                        <span class="text-yellow-500 mr-2">🔨</span>
+                        <strong>Phoenix & Viper</strong>
+                    </div>
+                    <p class="text-gray-400 text-sm">Pendiente: fallback para clientes perdidos y reportes</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Cargar stats globales
+        async function loadStats() {
+            try {
+                const resp = await fetch('/admin/api/stats');
+                const data = await resp.json();
+                document.getElementById('ingresos-hoy').textContent = `$${data.ingresos_hoy?.toFixed(2) || 0}`;
+                document.getElementById('ingresos-mes').textContent = `$${data.ingresos_mes?.toFixed(2) || 0}`;
+                document.getElementById('negocios-activos').textContent = data.negocios_activos || 0;
+                document.getElementById('alertas-abiertas').textContent = data.alertas_abiertas || 0;
+            } catch (e) {
+                console.error('Error cargando stats:', e);
+            }
+        }
+
+        // Cargar alertas
+        async function loadAlertas() {
+            try {
+                const resp = await fetch('/admin/api/alertas');
+                const alertas = await resp.json();
+                const container = document.getElementById('alertas-list');
+
+                if (!alertas || alertas.length === 0) {
+                    container.innerHTML = '<p class="text-gray-400 text-sm">Sin alertas. ¡Excelente!</p>';
+                    return;
+                }
+
+                container.innerHTML = alertas.map(a => `
+                    <div class="bg-slate-700 rounded p-4 border-l-4 border-red-500">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <strong>${a.tipo}</strong>
+                                <p class="text-gray-400 text-sm">${a.codigo || 'GLOBAL'} — ${a.descripcion}</p>
+                            </div>
+                            <button onclick="resolverAlerta(${a.id})" class="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs">
+                                Resolver
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error cargando alertas:', e);
+            }
+        }
+
+        // Cargar negocios
+        async function loadNegocios() {
+            try {
+                const resp = await fetch('/admin/api/negocios');
+                const negocios = await resp.json();
+                const container = document.getElementById('negocios-list');
+
+                if (!negocios || negocios.length === 0) {
+                    container.innerHTML = '<p class="text-gray-400 text-sm">Sin negocios aún</p>';
+                    return;
+                }
+
+                container.innerHTML = negocios.map(n => `
+                    <div class="bg-slate-700 rounded p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <strong>${n.nombre}</strong> <span class="text-gray-500 text-sm">(${n.codigo})</span>
+                                <p class="text-gray-400 text-sm">Tipo: ${n.tipo} | Modo: ${n.modo}</p>
+                            </div>
+                            <span class="px-2 py-1 rounded text-xs ${n.activo ? 'bg-green-600' : 'bg-gray-600'}">
+                                ${n.activo ? '✅ Activo' : '❌ Inactivo'}
+                            </span>
+                        </div>
+                        <div class="text-xs text-gray-400 mb-3">
+                            Hoy: $${n.stats.ingresos_hoy?.toFixed(2) || 0} | Pedidos: ${n.stats.pedidos_hoy || 0} | Citas: ${n.stats.citas_hoy || 0}
+                        </div>
+                        <a href="/admin/negocio/${n.codigo}" class="text-blue-400 hover:text-blue-300 text-sm">Ver detalle →</a>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error cargando negocios:', e);
+            }
+        }
+
+        // Resolver alerta
+        async function resolverAlerta(id) {
+            try {
+                await fetch(`/admin/api/resolver/${id}`, { method: 'POST' });
+                loadAlertas();
+                loadStats();
+            } catch (e) {
+                console.error('Error resolviendo alerta:', e);
+            }
+        }
+
+        // Cargar al iniciar
+        loadStats();
+        loadAlertas();
+        loadNegocios();
+
+        // Recargar cada 30 segundos
+        setInterval(() => {
+            loadStats();
+            loadAlertas();
+            loadNegocios();
+        }, 30000);
+    </script>
+
+</body>
+</html>

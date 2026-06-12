@@ -1,5 +1,5 @@
 # CLAUDE.md
-# Wasapeame — Plataforma de IA en WhatsApp para MiPYMEs
+# Wappi — Plataforma de IA en WhatsApp para MiPYMEs
 # Stack: Python · Flask · Meta Cloud API · PostgreSQL · Azure App Service · Anthropic Claude · Azure Speech
 
 ---
@@ -38,9 +38,9 @@ DATABASE_URL              — PostgreSQL connection string
 META_ACCESS_TOKEN         — System User Token de Meta (necesita whatsapp_business_management)
 META_PHONE_NUMBER_ID      — ID del número de WhatsApp en Meta Business
 META_WABA_ID              — WhatsApp Business Account ID (1323108735812246)
-META_VERIFY_TOKEN         — Token de verificación del webhook (default: wasapeame_verify_2026)
+META_VERIFY_TOKEN         — Token de verificación del webhook (default: wappi_verify_2026)
 ANTHROPIC_API_KEY         — API key de Anthropic para Claude (asistente IA + transcripción)
-AZURE_SPEECH_KEY          — Azure Speech Services (transcripción médica, recurso wasapeame-speech, westeurope)
+AZURE_SPEECH_KEY          — Azure Speech Services (transcripción médica, recurso wappi-speech, westeurope)
 GOOGLE_CLIENT_ID          — OAuth Google Calendar
 GOOGLE_CLIENT_SECRET      — OAuth Google Calendar
 ```
@@ -134,7 +134,7 @@ El código de `manejar_flow_cita` y `crear_flow_negocio.py` existe en el repo pe
 
 ### Transcripción médica (`transcripcion_medica.py`)
 
-Doctor envía audio de voz → Azure Speech (`es-DO`, recurso `wasapeame-speech`, westeurope, F0 5h/mes) → Claude Haiku → historia clínica estructurada en PDF → enviada por WhatsApp al doctor → doctor puede reenviarla a un paciente.
+Doctor envía audio de voz → Azure Speech (`es-DO`, recurso `wappi-speech`, westeurope, F0 5h/mes) → Claude Haiku → historia clínica estructurada en PDF → enviada por WhatsApp al doctor → doctor puede reenviarla a un paciente.
 
 ### Nota del paciente
 
@@ -172,10 +172,10 @@ Chat directo entre negocio y cliente fuera del flujo estándar. Se activa con `c
 ## Quick Reference
 
 ```
-Repo:              github.com/vhiarly/wasapeame
-Deploy:            Azure App Service — wasapeame-rg, West Europe
-URL producción:    https://wasapeame.co
-Webhook endpoint:  POST https://wasapeame.co/webhook
+Repo:              github.com/vhiarly/wappi
+Deploy:            Azure App Service — wappi-rg, West Europe
+URL producción:    https://wappi.co
+Webhook endpoint:  POST https://wappi.co/webhook
 META_WABA_ID:      1323108735812246
 Negocios activos:  SE1 (Pilar), ME1 (Dr. Jim Marmolejos), ME2 (Dr. Feris Olivero)
 ```
@@ -222,7 +222,7 @@ Ventana de 24h de Meta: mensajes salientes fuera de la ventana deben ser templat
 | **Phoenix** | — | 🔨 Pendiente | Fallback inteligente para clientes perdidos. Solo activar para DUEÑO_WHATSAPP primero. |
 | **Viper** | — | 🔨 Pendiente | Reportes semanales al dueño del negocio. Esperar feedback de clientes para diseñarlo. |
 
-Dashboard de agentes: `https://wasapeame.co/agents` — PIN: `AGENTS_PIN` env var (default `wasapeame2026`)
+Dashboard de agentes: `https://wappi.co/agents` — PIN: `AGENTS_PIN` env var (default `wappi2026`)
 
 ### Maverick — detalles
 - Corre en daemon thread cada 5 minutos (`INTERVALO_SEGUNDOS = 300`)
@@ -307,4 +307,4 @@ Antes de escribir cualquier código:
 
 ## 5. SESSION HANDOFF
 
-Al terminar cada sesión, escribe un resumen de máximo 200 tokens en `~/Documents/vhiarlyob/Proyectos/Wasapeame/Session_[fecha].md` con: qué se construyó, qué quedó incompleto, y qué hacer primero la próxima sesión.
+Al terminar cada sesión, escribe un resumen de máximo 200 tokens en `~/Documents/vhiarlyob/Proyectos/Wappi/Session_[fecha].md` con: qué se construyó, qué quedó incompleto, y qué hacer primero la próxima sesión.

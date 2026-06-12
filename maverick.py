@@ -25,6 +25,17 @@ def _log(agente, tipo, descripcion, detalle=None, resuelto=False):
     )
 
 
+def _registrar_imprevisto(tipo, codigo, descripcion, detalle=None):
+    """Registra un imprevisto en la tabla imprevistos para el dashboard admin"""
+    try:
+        execute(
+            "INSERT INTO imprevistos (tipo, codigo, descripcion, detalle, estado, creado_en) VALUES (%s,%s,%s,%s,'abierto',NOW())",
+            (tipo, codigo, descripcion, json.dumps(detalle) if detalle else None)
+        )
+    except Exception as e:
+        print(f"[Maverick] Error registrando imprevisto: {e}")
+
+
 def _whatsapp_alerta(mensaje):
     token    = os.getenv("META_ACCESS_TOKEN")
     phone_id = os.getenv("META_PHONE_NUMBER_ID")
@@ -63,6 +74,12 @@ def _revisar_pedidos_atascados():
              f"Pedido atascado: {r['numero_cliente']} en {r['codigo']} | estado: {r['estado']} | {minutos} min sin movimiento",
              {"numero": r["numero_cliente"], "codigo": r["codigo"], "estado": r["estado"], "minutos": minutos},
              resuelto=False)
+        _registrar_imprevisto(
+            "pedido_atascado",
+            r["codigo"],
+            f"Pedido de {r['numero_cliente']} atascado hace {minutos} minutos en estado {r['estado']}",
+            {"numero_cliente": r["numero_cliente"], "estado": r["estado"], "minutos": minutos}
+        )
         _whatsapp_alerta(
             f"⚠️ *Maverick*\n\n"
             f"Pedido atascado {minutos} min\n"
@@ -98,6 +115,12 @@ def _revisar_citas_atascadas():
                  f"Cita atascada: {r['numero_cliente']} en {r['codigo']} | estado: {r['estado']} | {minutos} min",
                  {"numero": r["numero_cliente"], "codigo": r["codigo"], "estado": r["estado"], "minutos": minutos},
                  resuelto=False)
+            _registrar_imprevisto(
+                "cita_atascada",
+                r["codigo"],
+                f"Cita de {r['numero_cliente']} atascada hace {minutos} minutos en estado {r['estado']}",
+                {"numero_cliente": r["numero_cliente"], "estado": r["estado"], "minutos": minutos}
+            )
             _whatsapp_alerta(
                 f"⚠️ *Maverick*\n\n"
                 f"Cita atascada {minutos} min\n"
@@ -137,6 +160,12 @@ def _revisar_citas_sin_confirmar():
              f"Cita sin comprobante >2h: {r['numero_cliente']} | {r['nombre_servicio']} en {r['codigo']}",
              {"id": r["id"], "numero": r["numero_cliente"], "codigo": r["codigo"]},
              resuelto=False)
+        _registrar_imprevisto(
+            "pago_pendiente",
+            r["codigo"],
+            f"Pago pendiente de {r['numero_cliente']} para {r['nombre_servicio']} hace más de 2 horas",
+            {"numero_cliente": r["numero_cliente"], "servicio": r["nombre_servicio"], "cita_id": r["id"]}
+        )
         _whatsapp_alerta(
             f"💳 *Maverick*\n\n"
             f"Cita sin comprobante hace más de 2h\n"

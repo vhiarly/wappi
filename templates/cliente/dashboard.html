@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wappi — {{ negocio_nombre }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-blue-50">
+
+    <!-- Header -->
+    <div class="bg-white border-b px-8 py-6 shadow-sm">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Wappi — {{ negocio_nombre }}</h1>
+                <p class="text-gray-600 text-sm mt-1">Código: <span class="font-mono">{{ codigo }}</span></p>
+            </div>
+            <div>
+                <a href="/cliente" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white text-sm">
+                    Salir
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto p-8">
+
+        <!-- Resumen estadísticas -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-gray-600 text-sm font-medium">Ingresos Realizados</div>
+                <div class="text-3xl font-bold mt-2 text-green-600" id="ingresos-hoy">$0</div>
+                <p class="text-gray-500 text-xs mt-2">Hoy</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-gray-600 text-sm font-medium">Ingresos Pendientes</div>
+                <div class="text-3xl font-bold mt-2 text-yellow-600" id="ingresos-pendientes">$0</div>
+                <p class="text-gray-500 text-xs mt-2">Esperando confirmación</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-gray-600 text-sm font-medium">Clientes Activos</div>
+                <div class="text-3xl font-bold mt-2 text-blue-600" id="clientes-nuevos">0</div>
+                <p class="text-gray-500 text-xs mt-2">Nuevos en 30 días</p>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="bg-white rounded-lg shadow mb-8">
+            <div class="flex border-b">
+                <button onclick="switchTab('pedidos')" class="flex-1 px-6 py-4 font-medium border-b-2 border-blue-600 text-blue-600" id="tab-pedidos">
+                    📦 {% if modo == 'pedidos' %}Pedidos{% else %}Citas{% endif %}
+                </button>
+                <button onclick="switchTab('productos')" class="flex-1 px-6 py-4 font-medium text-gray-600 hover:text-gray-900" id="tab-productos">
+                    🛍️ {% if modo == 'pedidos' %}Catálogo{% else %}Servicios{% endif %}
+                </button>
+                <button onclick="switchTab('horarios')" class="flex-1 px-6 py-4 font-medium text-gray-600 hover:text-gray-900" id="tab-horarios">
+                    🕐 Horarios
+                </button>
+            </div>
+
+            <!-- Tab: Pedidos/Citas -->
+            <div id="tab-content-pedidos" class="p-6">
+                <div id="pedidos-list" class="space-y-3">
+                    <p class="text-gray-500 text-sm">Cargando...</p>
+                </div>
+            </div>
+
+            <!-- Tab: Productos/Servicios -->
+            <div id="tab-content-productos" class="p-6 hidden">
+                <div id="productos-list" class="space-y-3">
+                    <p class="text-gray-500 text-sm">Cargando...</p>
+                </div>
+            </div>
+
+            <!-- Tab: Horarios -->
+            <div id="tab-content-horarios" class="p-6 hidden">
+                <div id="horarios-list" class="space-y-3">
+                    <p class="text-gray-500 text-sm">Cargando...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const codigo = '{{ codigo }}';
+        const modo = '{{ modo }}';
+
+        function switchTab(tab) {
+            ['pedidos', 'productos', 'horarios'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
+                document.getElementById(`tab-content-${t}`).classList.add('hidden');
+            });
+            document.getElementById(`tab-${tab}`).classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+            document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+        }
+
+        async function loadStats() {
+            try {
+                const resp = await fetch(`/cliente/api/stats`);
+                const data = await resp.json();
+                document.getElementById('ingresos-hoy').textContent = `$${data.ingresos_hoy?.toFixed(2) || 0}`;
+                document.getElementById('ingresos-pendientes').textContent = `$${data.ingresos_mes?.toFixed(2) || 0}`;
+                document.getElementById('clientes-nuevos').textContent = data.clientes_nuevos || 0;
+            } catch (e) {
+                console.error('Error cargando stats:', e);
+            }
+        }
+
+        async function loadPedidos() {
+            try {
+                const resp = await fetch(`/cliente/api/pedidos`);
+                const data = await resp.json();
+                const container = document.getElementById('pedidos-list');
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">Sin pedidos aún</p>';
+                    return;
+                }
+
+                container.innerHTML = data.slice(0, 20).map(p => `
+                    <div class="bg-gray-50 rounded p-4 border">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <strong>${p.numero}</strong>
+                                <p class="text-gray-600 text-sm">Total: $${p.total?.toFixed(2) || 0}</p>
+                            </div>
+                            <span class="px-2 py-1 rounded text-xs font-medium ${
+                                p.estado === 'pedido_enviado' ? 'bg-green-100 text-green-800' :
+                                p.estado === 'esperando_confirmacion' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-blue-100 text-blue-800'
+                            }">
+                                ${p.estado}
+                            </span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error cargando pedidos:', e);
+            }
+        }
+
+        async function loadProductos() {
+            try {
+                const resp = await fetch(`/cliente/api/catalogo`);
+                const data = await resp.json();
+                const container = document.getElementById('productos-list');
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">Sin productos aún</p>';
+                    return;
+                }
+
+                const label = modo === 'pedidos' ? 'Catálogo' : 'Servicios';
+                container.innerHTML = data.slice(0, 20).map((p, i) => `
+                    <div class="bg-gray-50 rounded p-4 border">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <strong>${p.nombre}</strong>
+                                <p class="text-gray-600 text-sm">$${p.precio?.toFixed(2) || 0}</p>
+                            </div>
+                            <span class="px-2 py-1 rounded text-xs ${p.activo ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}">
+                                ${p.activo ? 'Activo' : 'Inactivo'}
+                            </span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error cargando productos:', e);
+            }
+        }
+
+        async function loadHorarios() {
+            try {
+                const resp = await fetch(`/cliente/api/horarios`);
+                const data = await resp.json();
+                const container = document.getElementById('horarios-list');
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">Sin horarios configurados</p>';
+                    return;
+                }
+
+                container.innerHTML = data.map(h => `
+                    <div class="bg-gray-50 rounded p-4 border">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <strong>${h.dia}</strong>
+                                ${h.trabaja ?
+                                    `<p class="text-gray-600 text-sm">${h.inicio} - ${h.fin}</p>` :
+                                    `<p class="text-gray-600 text-sm">Cerrado</p>`
+                                }
+                            </div>
+                            <span class="px-2 py-1 rounded text-xs ${h.trabaja ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}">
+                                ${h.trabaja ? 'Abierto' : 'Cerrado'}
+                            </span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error cargando horarios:', e);
+            }
+        }
+
+        // Cargar al iniciar
+        loadStats();
+        loadPedidos();
+        loadProductos();
+        loadHorarios();
+
+        // Recargar cada 30 segundos
+        setInterval(() => {
+            loadStats();
+            loadPedidos();
+        }, 30000);
+    </script>
+
+</body>
+</html>

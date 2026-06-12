@@ -162,6 +162,23 @@ CREATE TABLE IF NOT EXISTS leads_negocios (
     numero_contacto  VARCHAR(50),
     creado_en        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS dashboard_stats (
+    codigo       VARCHAR(50) PRIMARY KEY,
+    stats        JSONB       NOT NULL DEFAULT '{}',
+    actualizado  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS imprevistos (
+    id          SERIAL      PRIMARY KEY,
+    codigo      VARCHAR(10),
+    tipo        VARCHAR(50) NOT NULL,
+    descripcion TEXT        NOT NULL,
+    detalle     JSONB       DEFAULT '{}',
+    estado      VARCHAR(20) NOT NULL DEFAULT 'abierto',
+    resuelto_en TIMESTAMPTZ,
+    creado_en   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 

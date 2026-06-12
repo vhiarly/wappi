@@ -20,9 +20,12 @@ from flujo_citas import (manejar_cita, manejar_negocio_citas, tiene_flujo_citas,
 from flujo_registro import manejar_registro, iniciar_registro, tiene_flujo_registro
 from asistente_ia import consultar_ia, respuesta_ayuda
 from maverick import iniciar_maverick
+from agente_atlas import iniciar_atlas
 from transcripcion_medica import procesar_nota_voz_medica
 from flujo_citas import guardar_transcripcion_pendiente
 from oauth_routes import oauth_bp
+from admin_routes import admin_bp
+from cliente_routes import cliente_bp
 
 load_dotenv()
 init_pool()
@@ -33,8 +36,11 @@ execute("CREATE TABLE IF NOT EXISTS clientes (numero TEXT PRIMARY KEY, nombre TE
 execute("ALTER TABLE conversaciones_registro ADD COLUMN IF NOT EXISTS datos JSONB NOT NULL DEFAULT '{}'")
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-prod")
 limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
 app.register_blueprint(oauth_bp, url_prefix='/oauth')
+app.register_blueprint(admin_bp)
+app.register_blueprint(cliente_bp)
 
 
 @app.route("/ping")
@@ -171,6 +177,7 @@ def cancelar_timer_relay(numero_cliente):
 
 iniciar_recordatorios(meta_send)
 iniciar_maverick()
+iniciar_atlas()
 
 LIMITE_MSG = 1500
 

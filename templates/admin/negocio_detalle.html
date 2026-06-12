@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wappi Admin — {{ negocio[1] }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-gray-100">
+
+    <!-- Header -->
+    <div class="bg-slate-800 border-b border-slate-700 px-8 py-6">
+        <div class="flex justify-between items-center">
+            <div>
+                <a href="/admin/dashboard" class="text-blue-400 hover:text-blue-300 text-sm mb-2">← Volver al dashboard</a>
+                <h1 class="text-3xl font-bold mt-2">{{ negocio[1] }}</h1>
+                <p class="text-gray-400 text-sm mt-1">Código: {{ negocio[0] }} | Tipo: {{ negocio[2] }} | Modo: {{ negocio[3] }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-8">
+
+        <!-- Info básica -->
+        <div class="bg-slate-800 rounded-lg p-6 border border-slate-700 mb-8">
+            <h2 class="text-xl font-bold mb-4">Información Básica</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <p class="text-gray-400 text-sm">Código</p>
+                    <p class="font-mono text-lg">{{ negocio[0] }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Número de WhatsApp</p>
+                    <p class="font-mono text-lg">+{{ negocio[4] }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Tipo</p>
+                    <p class="font-mono text-lg">{{ negocio[2] }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Estado</p>
+                    <p class="font-mono text-lg">
+                        {% if negocio[5] %}
+                        <span class="text-green-400">✅ Activo</span>
+                        {% else %}
+                        <span class="text-red-400">❌ Inactivo</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Acciones rápidas -->
+        <div class="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <h2 class="text-xl font-bold mb-4">Acciones</h2>
+            <div class="space-y-3">
+                <button onclick="notificar()" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm">
+                    📱 Enviar WhatsApp
+                </button>
+                <a href="/admin/negocio/{{ negocio[0] }}/chats" class="block px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm text-center">
+                    💬 Ver Chats
+                </a>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function notificar() {
+            const mensaje = prompt('¿Qué mensaje quieres enviar?');
+            if (!mensaje) return;
+
+            fetch('/admin/api/notificar/{{ negocio[0] }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mensaje })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    alert('✓ Mensaje enviado');
+                } else {
+                    alert('✗ Error: ' + d.error);
+                }
+            })
+            .catch(e => alert('Error: ' + e));
+        }
+    </script>
+
+</body>
+</html>
