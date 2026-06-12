@@ -30,7 +30,10 @@ from cliente_routes import cliente_bp
 load_dotenv()
 init_pool()
 
-execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
+try:
+    execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
+except:
+    pass
 execute("CREATE TABLE IF NOT EXISTS clientes_vistos (numero TEXT PRIMARY KEY)")
 execute("CREATE TABLE IF NOT EXISTS clientes (numero TEXT PRIMARY KEY, nombre TEXT, email TEXT)")
 execute("ALTER TABLE conversaciones_registro ADD COLUMN IF NOT EXISTS datos JSONB NOT NULL DEFAULT '{}'")
