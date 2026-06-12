@@ -103,10 +103,6 @@ def meta_send(to, body, media_id=None, media_type="image"):
 
 
 
-timers       = {}
-timers_relay = {}
-
-
 def _ya_conocido(numero):
     if execute("SELECT 1 FROM clientes_vistos WHERE numero = %s", (numero,), fetch="one"):
         return True
@@ -136,14 +132,11 @@ def _es_comando_negocio(msg_lower, modo):
 
 
 def detener_timer(numero_cliente):
-    if numero_cliente in timers:
-        timers[numero_cliente].cancel()
-        del timers[numero_cliente]
+    pass
 
 
 def cancelar_por_timeout(numero_cliente):
     cancelar_timeout(numero_cliente, meta_send)
-    timers.pop(numero_cliente, None)
     try:
         meta_send(numero_cliente,
             "Tu sesión expiró por inactividad. Escribe *Hola* si quieres comunicarte con "
@@ -153,32 +146,19 @@ def cancelar_por_timeout(numero_cliente):
 
 
 def reiniciar_timer(numero_cliente):
-    if numero_cliente in timers:
-        timers[numero_cliente].cancel()
-    timer = threading.Timer(TIMEOUT_SEGUNDOS, cancelar_por_timeout, args=[numero_cliente])
-    timer.daemon = True
-    timer.start()
-    timers[numero_cliente] = timer
+    pass
 
 
 def cerrar_relay_por_timeout(numero_cliente):
-    timers_relay.pop(numero_cliente, None)
     cerrar_relay_timeout(numero_cliente, meta_send)
 
 
 def iniciar_timer_relay(numero_cliente):
-    if numero_cliente in timers_relay:
-        timers_relay[numero_cliente].cancel()
-    t = threading.Timer(RELAY_SEGUNDOS, cerrar_relay_por_timeout, args=[numero_cliente])
-    t.daemon = True
-    t.start()
-    timers_relay[numero_cliente] = t
+    pass
 
 
 def cancelar_timer_relay(numero_cliente):
-    if numero_cliente in timers_relay:
-        timers_relay[numero_cliente].cancel()
-        timers_relay.pop(numero_cliente, None)
+    pass
 
 
 iniciar_recordatorios(meta_send)
