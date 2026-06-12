@@ -632,7 +632,13 @@ def debug_negocios():
         negocios = execute("SELECT codigo, nombre, pin FROM negocios ORDER BY codigo", fetch='all')
         if not negocios:
             return jsonify({"mensaje": "No hay negocios en la BD"})
-        return jsonify({"negocios": [{"codigo": n[0], "nombre": n[1], "pin": n[2]} for n in negocios]})
+        result = []
+        for n in negocios:
+            if isinstance(n, dict):
+                result.append(n)
+            else:
+                result.append({"codigo": n[0], "nombre": n[1], "pin": n[2]})
+        return jsonify({"negocios": result})
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
