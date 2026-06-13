@@ -57,6 +57,9 @@
                 <button onclick="switchTab('horarios')" class="flex-1 px-6 py-4 font-medium text-gray-600 hover:text-gray-900" id="tab-horarios">
                     🕐 Horarios
                 </button>
+                <button onclick="switchTab('analytics')" class="flex-1 px-6 py-4 font-medium text-gray-600 hover:text-gray-900" id="tab-analytics">
+                    📊 Analytics PRO
+                </button>
             </div>
 
             <!-- Tab: Pedidos/Citas -->
@@ -79,6 +82,26 @@
                     <p class="text-gray-500 text-sm">Cargando...</p>
                 </div>
             </div>
+
+            <!-- Tab: Analytics PRO -->
+            <div id="tab-content-analytics" class="p-6 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 rounded-lg p-4 border">
+                        <h3 class="font-medium text-gray-900 mb-4">Resumen Hoy</h3>
+                        <canvas id="chart-resumen"></canvas>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4 border">
+                        <h3 class="font-medium text-gray-900 mb-4">Estado de Conversaciones</h3>
+                        <canvas id="chart-estado"></canvas>
+                    </div>
+                </div>
+                <div class="mt-6 bg-gray-50 rounded-lg p-4 border">
+                    <h3 class="font-medium text-gray-900 mb-4">Estadísticas</h3>
+                    <div id="analytics-stats" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <p class="text-gray-500 text-sm">Cargando...</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>
@@ -88,12 +111,16 @@
         const modo = '{{ modo }}';
 
         function switchTab(tab) {
-            ['pedidos', 'productos', 'horarios'].forEach(t => {
+            ['pedidos', 'productos', 'horarios', 'analytics'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
                 document.getElementById(`tab-content-${t}`).classList.add('hidden');
             });
             document.getElementById(`tab-${tab}`).classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
             document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+
+            if (tab === 'analytics') {
+                loadAnalytics();
+            }
         }
 
         async function loadStats() {
@@ -200,6 +227,65 @@
                 `).join('');
             } catch (e) {
                 console.error('Error cargando horarios:', e);
+            }
+        }
+
+        async function loadAnalytics() {
+            try {
+                const [actividad, estados] = await Promise.all([
+                    fetch(`/api/pro/analytics/actividad?codigo=${codigo}`).then(r => r.json()),
+                    fetch(`/api/pro/analytics/estado-conversaciones?codigo=${codigo}`).then(r => r.json())
+                ]);
+
+                // Gráfico de resumen hoy
+                const ctxResumen = document.getElementById('chart-resumen').getContext('2d');
+                new Chart(ctxResumen, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Completados', 'En progreso'],
+                        datasets: [{
+                            label: 'Conversaciones',
+                            data: [actividad.pedidos_completados || 0, actividad.conversaciones_activas || 0],
+                            backgroundColor: ['#10b981', '#f59e0b']
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: true } } }
+                });
+
+                // Gráfico de estados
+                const ctxEstado = document.getElementById('chart-estado').getContext('2d');
+                const estadosData = estados.resumen_por_estado || {};
+                new Chart(ctxEstado, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(estadosData),
+                        datasets: [{
+                            data: Object.values(estadosData),
+                            backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: true } } }
+                });
+
+                // Stats
+                const statsContainer = document.getElementById('analytics-stats');
+                statsContainer.innerHTML = `
+                    <div class="bg-white rounded p-4">
+                        <p class="text-gray-600 text-sm">Pedidos Hoy</p>
+                        <p class="text-2xl font-bold text-blue-600">${actividad.pedidos_completados || 0}</p>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <p class="text-gray-600 text-sm">Activos Ahora</p>
+                        <p class="text-2xl font-bold text-yellow-600">${actividad.conversaciones_activas || 0}</p>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <p class="text-gray-600 text-sm">Total Estado</p>
+                        <p class="text-2xl font-bold text-green-600">${estados.total || 0}</p>
+                    </div>
+                `;
+            } catch (e) {
+                console.error('Error cargando analytics:', e);
+                document.getElementById('analytics-stats').innerHTML = '<p class="text-red-600 text-sm">Error cargando datos</p>';
             }
         }
 
