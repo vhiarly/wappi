@@ -3,7 +3,9 @@ set -e
 
 APP="Wappi"
 RG="wasapeame-rg"
-URL="https://wappi-gwbeheayascybpcv.canadacentral-01.azurewebsites.net/ping"
+SLOT="staging"
+URL_STAGING="https://wappi-staging-ata9hcgydbbahjbw.canadacentral-01.azurewebsites.net/ping"
+URL_PRODUCTION="https://wappi-gwbeheayascybpcv.canadacentral-01.azurewebsites.net/ping"
 ZIP="/tmp/wasapeame_deploy.zip"
 ESPERADO="¡El servidor está vivo!"
 
@@ -44,34 +46,39 @@ zip -r "$ZIP" . \
 ok "Zip creado ($(du -sh $ZIP | cut -f1))"
 
 # ── 4. Deploy ────────────────────────────────────────────────────────────
-info "Subiendo a Azure App Service..."
+info "Subiendo a Azure App Service (staging)..."
 az webapp deploy \
   --name "$APP" \
   --resource-group "$RG" \
   --src-path "$ZIP" \
   --type zip \
+  --slot staging \
   --timeout 300 \
   --output none
-ok "Deploy completado"
+ok "Deploy a staging completado"
 
 # ── 5. Verificar que el app levantó ─────────────────────────────────────
-info "Esperando que el app reinicie..."
+info "Esperando que staging reinicie..."
 for i in {1..12}; do
   sleep 5
-  RESP=$(curl -sk --max-time 5 "$URL" 2>/dev/null || true)
+  RESP=$(curl -sk --max-time 5 "$URL_STAGING" 2>/dev/null || true)
   if [ "$RESP" = "$ESPERADO" ]; then
-    ok "App respondiendo en $URL"
+    ok "Staging respondiendo en $URL_STAGING"
     break
   fi
   echo "   intento $i/12..."
   if [ $i -eq 12 ]; then
-    fail "El app no responde después de 60s. Revisa Azure Portal."
+    fail "Staging no responde después de 60s. Revisa Azure Portal."
   fi
 done
 
 # ── 6. Limpieza ──────────────────────────────────────────────────────────
 rm -f "$ZIP"
 echo ""
-echo -e "${GREEN}Deploy exitoso ✓${NC}"
-echo -e "Commit: ${COMMIT}"
-echo -e "URL:    https://wasapeame.co"
+echo -e "${GREEN}Deploy a STAGING exitoso ✓${NC}"
+echo -e "Commit:         ${COMMIT}"
+echo -e "Staging:        $URL_STAGING"
+echo -e "Production:     $URL_PRODUCTION"
+echo ""
+echo -e "${YELLOW}Próximo: hacer SWAP a production${NC}"
+echo "az webapp deployment slot swap --name Wappi --resource-group wasapeame-rg --slot staging"
