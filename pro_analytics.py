@@ -25,15 +25,15 @@ def ventas_comparativa():
         ayer = hoy - timedelta(days=1)
 
         hoy_total = execute("""
-            SELECT COALESCE(SUM(monto_total), 0) as total
+            SELECT COALESCE(SUM(total), 0) as total
             FROM conversaciones_pedidos
-            WHERE codigo = %s AND DATE(creado_en) = %s AND estado = 'completado'
+            WHERE codigo = %s AND DATE(actualizado_en) = %s AND estado = 'completado'
         """, (codigo, hoy), fetch='one')
 
         ayer_total = execute("""
-            SELECT COALESCE(SUM(monto_total), 0) as total
+            SELECT COALESCE(SUM(total), 0) as total
             FROM conversaciones_pedidos
-            WHERE codigo = %s AND DATE(creado_en) = %s AND estado = 'completado'
+            WHERE codigo = %s AND DATE(actualizado_en) = %s AND estado = 'completado'
         """, (codigo, ayer), fetch='one')
 
         hoy_val = hoy_total['total'] if hoy_total else 0
@@ -62,12 +62,12 @@ def top_productos():
 
         productos = execute("""
             SELECT
-                nombre_producto as nombre,
+                nombre as nombre,
                 COUNT(*) as cantidad_vendida,
-                SUM(precio_unitario * cantidad) as ingresos
+                SUM(precio) as ingresos
             FROM items_pedidos
-            WHERE codigo = %s AND DATE(creado_en) >= %s
-            GROUP BY nombre_producto
+            WHERE codigo = %s AND DATE(actualizado_en) >= %s
+            GROUP BY nombre
             ORDER BY cantidad_vendida DESC
             LIMIT 5
         """, (codigo, hace_30), fetch='all')
@@ -98,7 +98,7 @@ def clientes_frecuentes():
             SELECT
                 numero_cliente,
                 COUNT(*) as compras,
-                COALESCE(SUM(monto_total), 0) as gasto_total
+                COALESCE(SUM(total), 0) as gasto_total
             FROM conversaciones_pedidos
             WHERE codigo = %s AND estado = 'completado'
             GROUP BY numero_cliente
@@ -139,10 +139,10 @@ def ingresos_acumulados():
 
         resultado = execute("""
             SELECT
-                COALESCE(SUM(monto_total), 0) as total,
+                COALESCE(SUM(total), 0) as total,
                 COUNT(*) as pedidos
             FROM conversaciones_pedidos
-            WHERE codigo = %s AND estado = 'completado' AND DATE(creado_en) >= %s
+            WHERE codigo = %s AND estado = 'completado' AND DATE(actualizado_en) >= %s
         """, (codigo, desde), fetch='one')
 
         return jsonify({
