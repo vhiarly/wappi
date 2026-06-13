@@ -468,7 +468,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
                     f"*{HORAS_LABORALES_LIMITE} horas laborables* de anticipacion, "
                     "por lo que el reembolso queda a criterio del negocio.\n\n"
                     "Te notificaremos su decision. "
-                    f"Ver politica: wasapeame.co/descargo"
+                    f"Ver politica: wappi.do/descargo"
                 )
 
     # ── No-show reportado por cliente ──
@@ -852,7 +852,7 @@ def _escalar_noshow_sin_respuesta(twilio_send):
                 f"1. Mantener la cita como esta\n"
                 f"2. Reagendar\n"
                 f"3. Cancelar y solicitar reembolso\n\n"
-                f"wasapeame.co/descargo"
+                f"wappi.do/descargo"
             )
             print(f"[No-show] Escalado: {relay['numero_cliente']}")
         except Exception as e:
@@ -995,7 +995,7 @@ def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
             "Segun nuestra politica, tienes derecho a un *reembolso completo*.\n\n"
             "El negocio fue notificado y debe procesar la devolucion. "
             "Recibirás el comprobante por este chat.\n\n"
-            f"Mas informacion: wasapeame.co/descargo"
+            f"Mas informacion: wappi.do/descargo"
         )
 
     # Primera vez — cliente decide qué quiere
@@ -1021,7 +1021,7 @@ def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
         "¿Qué prefieres hacer?\n\n"
         "1. Reagendar la cita (tu pago sigue vigente)\n"
         "2. Reembolso completo\n\n"
-        f"Tus derechos: wasapeame.co/descargo"
+        f"Tus derechos: wappi.do/descargo"
     )
 
 
@@ -1113,7 +1113,7 @@ def _msg_confirmacion(estado, servicio, negocio):
         r += "\n\n⚠️ Por tu seguridad avisa a alguien de confianza sobre esta reunion antes de asistir."
     r += f"\n\n¿Necesitas cambiar? Escribe *reagendar {negocio.get('codigo','')}* o *cancelar cita {negocio.get('codigo','')}*"
     r += f"\n¿El negocio no se presenta? Escribe: *no show {negocio.get('codigo','').lower()}*"
-    r += f"\nPolitica de cancelacion: wasapeame.co/descargo"
+    r += f"\nPolitica de cancelacion: wappi.do/descargo"
     return r
 
 
@@ -1854,7 +1854,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             numero_cliente,
             "Consulta nuestra política de cancelación y reagendamiento.",
             "Ver política",
-            "https://wasapeame.co/descargo"
+            "https://wappi.do/descargo"
         )
         return None
 
@@ -2022,7 +2022,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
                 _del_estado_cita(num_cliente)
                 twilio_send(num_cliente,
                     f"*{negocio['nombre']}* no aprobó el reembolso en este caso. "
-                    f"Ver politica: wasapeame.co/descargo")
+                    f"Ver politica: wappi.do/descargo")
                 return f"Reembolso rechazado. Cliente notificado."
 
     # ── no show [número] — Pilar reporta cliente no-show ──
@@ -2063,7 +2063,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
             f"¿Qué deseas hacer?\n"
             f"1. Solicitar reagendar (sujeto a aprobacion del negocio)\n"
             f"2. Cancelar la cita\n\n"
-            f"wasapeame.co/descargo"
+            f"wappi.do/descargo"
         )
         return f"Cliente {m_ns.group(1)} notificado. Espera su respuesta."
 

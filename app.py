@@ -549,10 +549,10 @@ def privacidad():
     </section>
     <section>
       <h2>Contacto</h2>
-      <p>Escríbenos a <a href="mailto:hola@wasapeame.co">hola@wasapeame.co</a>.</p>
+      <p>Escríbenos a <a href="mailto:hola@wappi.do">hola@wappi.do</a>.</p>
     </section>
   </main>
-  <footer>© 2026 Wappi · <a href="mailto:hola@wasapeame.co">hola@wasapeame.co</a></footer>
+  <footer>© 2026 Wappi · <a href="mailto:hola@wappi.do">hola@wappi.do</a></footer>
 </body>
 </html>"""
     return make_response(html, 200, {"Content-Type": "text/html; charset=utf-8"})
