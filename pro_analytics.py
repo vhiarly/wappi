@@ -1,9 +1,6 @@
 """
-Analytics PRO para pedidos
-- Ventas hoy vs ayer
-- Top 5 productos
-- Clientes frecuentes
-- Ingresos acumulados
+Analytics PRO para pedidos (BÁSICO)
+Versión 1: Solo conteos y datos simples sin JSONB complexity
 """
 
 from flask import Blueprint, jsonify, request
@@ -13,46 +10,33 @@ from datetime import datetime, timedelta
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/pro/analytics')
 
 
-@analytics_bp.route('/ventas-comparativa', methods=['GET'])
-def ventas_comparativa():
-    """Ventas hoy vs ayer"""
+@analytics_bp.route('/pedidos-hoy', methods=['GET'])
+def pedidos_hoy():
+    """Pedidos completados hoy"""
     try:
         codigo = request.args.get('codigo')
         if not codigo:
             return jsonify({'error': 'codigo requerido'}), 400
 
         hoy = datetime.now().date()
-        ayer = hoy - timedelta(days=1)
 
-        hoy_total = execute("""
-            SELECT COALESCE(SUM(total), 0) as total
+        resultado = execute("""
+            SELECT COUNT(*) as pedidos
             FROM conversaciones_pedidos
-            WHERE codigo = %s AND DATE(actualizado_en) = %s AND estado = 'completado'
+            WHERE codigo = %s AND estado = 'completado' AND DATE(actualizado_en) = %s
         """, (codigo, hoy), fetch='one')
 
-        ayer_total = execute("""
-            SELECT COALESCE(SUM(total), 0) as total
-            FROM conversaciones_pedidos
-            WHERE codigo = %s AND DATE(actualizado_en) = %s AND estado = 'completado'
-        """, (codigo, ayer), fetch='one')
-
-        hoy_val = hoy_total['total'] if hoy_total else 0
-        ayer_val = ayer_total['total'] if ayer_total else 0
-
-        cambio = ((hoy_val - ayer_val) / ayer_val * 100) if ayer_val > 0 else 0
-
         return jsonify({
-            'hoy': float(hoy_val),
-            'ayer': float(ayer_val),
-            'cambio_pct': round(cambio, 2)
+            'fecha': str(hoy),
+            'pedidos_completados': resultado['pedidos'] if resultado else 0
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@analytics_bp.route('/top-productos', methods=['GET'])
-def top_productos():
-    """Top 5 productos vendidos (últimos 30 días)"""
+@analytics_bp.route('/clientes-activos', methods=['GET'])
+def clientes_activos():
+    """Clientes que han comprado (últimos 30 días)"""
     try:
         codigo = request.args.get('codigo')
         if not codigo:
@@ -60,97 +44,76 @@ def top_productos():
 
         hace_30 = datetime.now().date() - timedelta(days=30)
 
-        productos = execute("""
-            SELECT
-                nombre as nombre,
-                COUNT(*) as cantidad_vendida,
-                SUM(precio) as ingresos
-            FROM items_pedidos
-            WHERE codigo = %s AND DATE(actualizado_en) >= %s
-            GROUP BY nombre
-            ORDER BY cantidad_vendida DESC
-            LIMIT 5
-        """, (codigo, hace_30), fetch='all')
+        resultado = execute("""
+            SELECT COUNT(DISTINCT numero_cliente) as clientes_unicos
+            FROM conversaciones_pedidos
+            WHERE codigo = %s AND estado = 'completado' AND DATE(actualizado_en) >= %s
+        """, (codigo, hace_30), fetch='one')
 
         return jsonify({
-            'top_productos': [
-                {
-                    'nombre': p['nombre'],
-                    'cantidad': p['cantidad_vendida'],
-                    'ingresos': float(p['ingresos']) if p['ingresos'] else 0
-                }
-                for p in (productos or [])
-            ]
+            'periodo': 'últimos 30 días',
+            'clientes_unicos': resultado['clientes_unicos'] if resultado else 0
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@analytics_bp.route('/clientes-frecuentes', methods=['GET'])
-def clientes_frecuentes():
-    """Clientes que más compran"""
+@analytics_bp.route('/estado-conversaciones', methods=['GET'])
+def estado_conversaciones():
+    """Resumen de estados de conversaciones"""
     try:
         codigo = request.args.get('codigo')
         if not codigo:
             return jsonify({'error': 'codigo requerido'}), 400
 
-        clientes = execute("""
+        resultado = execute("""
             SELECT
-                numero_cliente,
-                COUNT(*) as compras,
-                COALESCE(SUM(total), 0) as gasto_total
+                estado,
+                COUNT(*) as cantidad
             FROM conversaciones_pedidos
-            WHERE codigo = %s AND estado = 'completado'
-            GROUP BY numero_cliente
-            ORDER BY compras DESC
-            LIMIT 10
+            WHERE codigo = %s
+            GROUP BY estado
         """, (codigo,), fetch='all')
 
+        resumen = {}
+        for row in (resultado or []):
+            resumen[row['estado']] = row['cantidad']
+
         return jsonify({
-            'clientes_frecuentes': [
-                {
-                    'numero': c['numero_cliente'],
-                    'compras': c['compras'],
-                    'gasto_total': float(c['gasto_total']) if c['gasto_total'] else 0
-                }
-                for c in (clientes or [])
-            ]
+            'codigo': codigo,
+            'resumen_por_estado': resumen,
+            'total': sum(resumen.values())
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@analytics_bp.route('/ingresos-acumulados', methods=['GET'])
-def ingresos_acumulados():
-    """Ingresos acumulados (mes/año actual)"""
+@analytics_bp.route('/actividad', methods=['GET'])
+def actividad():
+    """Actividad general: fecha actual"""
     try:
         codigo = request.args.get('codigo')
-        periodo = request.args.get('periodo', 'mes')  # 'mes' o 'ano'
-
         if not codigo:
             return jsonify({'error': 'codigo requerido'}), 400
 
         hoy = datetime.now().date()
 
-        if periodo == 'ano':
-            desde = hoy.replace(month=1, day=1)
-        else:  # mes
-            desde = hoy.replace(day=1)
-
-        resultado = execute("""
-            SELECT
-                COALESCE(SUM(total), 0) as total,
-                COUNT(*) as pedidos
+        completados = execute("""
+            SELECT COUNT(*) as total
             FROM conversaciones_pedidos
-            WHERE codigo = %s AND estado = 'completado' AND DATE(actualizado_en) >= %s
-        """, (codigo, desde), fetch='one')
+            WHERE codigo = %s AND estado = 'completado' AND DATE(actualizado_en) = %s
+        """, (codigo, hoy), fetch='one')
+
+        en_progreso = execute("""
+            SELECT COUNT(*) as total
+            FROM conversaciones_pedidos
+            WHERE codigo = %s AND estado IN ('pidiendo', 'esperando_confirmacion') AND DATE(actualizado_en) = %s
+        """, (codigo, hoy), fetch='one')
 
         return jsonify({
-            'periodo': periodo,
-            'desde': str(desde),
-            'hasta': str(hoy),
-            'ingresos_totales': float(resultado['total']) if resultado else 0,
-            'pedidos_completados': resultado['pedidos'] if resultado else 0
+            'fecha': str(hoy),
+            'pedidos_completados': completados['total'] if completados else 0,
+            'conversaciones_activas': en_progreso['total'] if en_progreso else 0
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
