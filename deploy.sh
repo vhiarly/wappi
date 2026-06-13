@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-APP="wasapeame"
+APP="Wappi"
 RG="wasapeame-rg"
-URL="https://wasapeame.co/ping"
+URL="https://wappi-gwbeheayascybpcv.canadacentral-01.azurewebsites.net/ping"
 ZIP="/tmp/wasapeame_deploy.zip"
 ESPERADO="¡El servidor está vivo!"
 

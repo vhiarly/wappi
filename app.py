@@ -28,6 +28,14 @@ from admin_routes import admin_bp
 from cliente_routes import cliente_bp
 
 load_dotenv()
+
+# PRO Features (con manejo de errores para evitar crasheos)
+try:
+    from pro_analytics import analytics_bp
+    pro_features = {'analytics': True}
+except ImportError as e:
+    print(f"⚠️ PRO Analytics no disponible: {e}")
+    pro_features = {'analytics': False}
 init_pool()
 
 try:
@@ -47,6 +55,14 @@ limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per
 app.register_blueprint(oauth_bp, url_prefix='/oauth')
 app.register_blueprint(admin_bp)
 app.register_blueprint(cliente_bp)
+
+# Registrar blueprints PRO si están disponibles
+if pro_features.get('analytics'):
+    try:
+        app.register_blueprint(analytics_bp)
+        print("✅ Analytics PRO registrado")
+    except Exception as e:
+        print(f"⚠️ Error registrando Analytics: {e}")
 
 
 @app.route("/ping")
