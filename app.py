@@ -38,10 +38,11 @@ except ImportError as e:
     pro_features = {'analytics': False}
 init_pool()
 
-try:
-    execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
-except:
-    pass
+# Movido a Maverick para no bloquear startup
+# try:
+#     execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
+# except:
+#     pass
 try:
     execute("CREATE TABLE IF NOT EXISTS clientes_vistos (numero TEXT PRIMARY KEY)")
     execute("CREATE TABLE IF NOT EXISTS clientes (numero TEXT PRIMARY KEY, nombre TEXT, email TEXT)")

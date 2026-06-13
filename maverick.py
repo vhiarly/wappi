@@ -176,9 +176,18 @@ def _revisar_citas_sin_confirmar():
         )
 
 
+def _limpiar_conversaciones_expiradas():
+    """Limpia conversaciones con timeout expirado"""
+    try:
+        execute("DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()")
+    except Exception as e:
+        print(f"[Maverick] Error limpiando conversaciones: {e}")
+
+
 def _ciclo_maverick():
     """Un ciclo completo de revisión."""
     try:
+        _limpiar_conversaciones_expiradas()
         _revisar_pedidos_atascados()
         _revisar_citas_atascadas()
         _revisar_sesiones_admin_expiradas()
