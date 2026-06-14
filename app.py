@@ -114,9 +114,12 @@ def meta_send(to, body, media_id=None, media_type="image"):
         }
     try:
         resp = http_requests.post(url, json=payload, headers=headers, timeout=10)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"[META] Error enviando a {to}: {e}")
+    except http_requests.exceptions.RequestException as e:
+        print(f"[META] ❌ Error de red enviando a {to}: {e}")
+        return
+    if resp.status_code != 200:
+        # Loguea el detalle de Meta (código de error real) sin reventar el flujo
+        print(f"[META] ⚠️ Envío a {to} falló — HTTP {resp.status_code}: {resp.text[:500]}")
 
 
 
