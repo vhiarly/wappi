@@ -628,7 +628,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
         )
         _del_estado_cita(numero)
         return (
-            "✅ Tus datos fueron enviados a Sir'Legal.\n\n"
+            f"✅ Tus datos fueron enviados a {negocio['nombre']}.\n\n"
             "El reembolso sera procesado en un plazo de *24-48 horas habiles*. "
             "Recibirás el comprobante de la devolución por este chat."
         )
@@ -1006,7 +1006,7 @@ def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
             f"Envia el comprobante con: comprobante reembolso {numero_cliente.replace('whatsapp:+','')}"
         )
         return (
-            "Hemos registrado que *Sir'Legal* no se presento por segunda vez.\n\n"
+            f"Hemos registrado que *{negocio['nombre']}* no se presento por segunda vez.\n\n"
             "Segun nuestra politica, tienes derecho a un *reembolso completo*.\n\n"
             "El negocio fue notificado y debe procesar la devolucion. "
             "Recibirás el comprobante por este chat.\n\n"

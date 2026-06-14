@@ -32,6 +32,12 @@ except Exception:
 _CONFIRMAR = {"confirmar", "confirma", "si", "sí", "dale", "ok", "okay", "listo", "va", "adelante", "procede"}
 _CANCELAR  = {"cancelar", "cancel", "salir", "exit", "bye", "chao", "nada", "olvida", "adios", "adiós",
               "nop", "no quiero", "paso", "0"}
+# Cancelación explícita — la única válida en estados que capturan texto libre
+# (dirección, referencia, fecha de retiro, comprobante), donde palabras como
+# "paso"/"nada"/"0" son respuestas legítimas del cliente, no intención de cancelar.
+_CANCELAR_EXPLICITO = {"cancelar", "cancel", "salir"}
+_ESTADOS_TEXTO_LIBRE = {"esperando_direccion", "esperando_referencia",
+                        "esperando_fecha_retiro", "esperando_comprobante"}
 
 _CONSULTA_PATTERNS = [r"\bhay\b", r"\bahi\b", r"\bay\b", r"\btienen\b", r"\btienes\b"]
 
@@ -648,8 +654,10 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
     s = estado["estado"]
     items = estado.get("items") or []
 
-    # Cancelar desde cualquier estado
-    if any(re.search(r"\b" + p + r"\b", msg) for p in _CANCELAR):
+    # Cancelar — en estados de texto libre solo cuenta cancelación explícita,
+    # para no disparar con "paso"/"nada"/"0" dentro de la respuesta del cliente.
+    _cancel_set = _CANCELAR_EXPLICITO if s in _ESTADOS_TEXTO_LIBRE else _CANCELAR
+    if any(re.search(r"\b" + p + r"\b", msg) for p in _cancel_set):
         notificar = s in ("pedido_enviado", "esperando_decision")
         return _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send,
                                      notificar_negocio=notificar)
