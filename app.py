@@ -12,10 +12,10 @@ from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 from db import init_pool, execute
 from negocio_router import detectar_codigo, obtener_negocio, es_numero_negocio
-from flujo_pedidos import manejar_pedido, manejar_negocio, tiene_flujo_activo, limpiar_flujo, cancelar_timeout
+from flujo_pedidos import manejar_pedido, manejar_negocio, tiene_flujo_activo, limpiar_flujo
 from flujo_citas import (manejar_cita, manejar_negocio_citas, tiene_flujo_citas,
                          tiene_sesion_admin_citas, iniciar_recordatorios,
-                         manejar_relay_mensaje, cerrar_relay_timeout,
+                         manejar_relay_mensaje,
                          manejar_flow_cita)
 from flujo_registro import manejar_registro, iniciar_registro, tiene_flujo_registro
 from asistente_ia import consultar_ia, respuesta_ayuda
@@ -126,9 +126,6 @@ def _ya_conocido(numero):
     execute("INSERT INTO clientes_vistos (numero) VALUES (%s) ON CONFLICT DO NOTHING", (numero,))
     return False
 
-TIMEOUT_SEGUNDOS = 180
-RELAY_SEGUNDOS   = 1800
-
 _PATRONES_NEGOCIO = {
     "pedidos": [r"^no\s+hay\b", r"\blisto\b"],
     "citas":   [r"mis\s+citas", r"ocupado\s+hasta\b",
@@ -148,26 +145,15 @@ def _es_comando_negocio(msg_lower, modo):
     return any(re.search(p, msg_lower) for p in patrones)
 
 
+# Stubs no-op: el timeout real lo manejan los barridos de fondo
+# (Maverick para pedidos, iniciar_recordatorios para citas y relay).
+# Se conservan porque flujo_pedidos/flujo_citas los reciben como callbacks.
 def detener_timer(numero_cliente):
     pass
 
 
-def cancelar_por_timeout(numero_cliente):
-    cancelar_timeout(numero_cliente, meta_send)
-    try:
-        meta_send(numero_cliente,
-            "Tu sesión expiró por inactividad. Escribe *Hola* si quieres comunicarte con "
-            "Wappi o el código del negocio para empezar de nuevo.")
-    except Exception:
-        pass
-
-
 def reiniciar_timer(numero_cliente):
     pass
-
-
-def cerrar_relay_por_timeout(numero_cliente):
-    cerrar_relay_timeout(numero_cliente, meta_send)
 
 
 def iniciar_timer_relay(numero_cliente):
@@ -610,7 +596,9 @@ def agents_api_limpiar():
 
 @app.route("/init")
 def init_db():
-    """Run migrations and seed data"""
+    """Run migrations and seed data (protegido con AGENTS_PIN)"""
+    if request.args.get("pin", "") != AGENTS_PIN:
+        return jsonify({"error": "unauthorized"}), 403
     try:
         import subprocess
         result = subprocess.run(["python", "migrate.py"], capture_output=True, text=True, timeout=30)
@@ -620,25 +608,6 @@ def init_db():
             return jsonify({"error": result.stderr}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@app.route("/debug/negocios")
-def debug_negocios():
-    """Debug: show all negocios and their PINs"""
-    try:
-        negocios = execute("SELECT codigo, nombre, pin FROM negocios ORDER BY codigo", fetch='all')
-        if not negocios:
-            return jsonify({"mensaje": "No hay negocios en la BD"})
-        result = []
-        for n in negocios:
-            if isinstance(n, dict):
-                result.append(n)
-            else:
-                result.append({"codigo": n[0], "nombre": n[1], "pin": n[2]})
-        return jsonify({"negocios": result})
-    except Exception as e:
-        import traceback
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
 if __name__ == "__main__":

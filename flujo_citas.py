@@ -875,6 +875,20 @@ def _limpiar_conversaciones_expiradas():
     """)
 
 
+def _cerrar_relays_expirados(twilio_send):
+    """Cierra relays (chat negocio↔cliente) abiertos por más de 30 minutos."""
+    expirados = execute(
+        "SELECT numero_cliente FROM sesiones_relay "
+        "WHERE estado IN ('activo','cerrando') AND creado_en < NOW() - INTERVAL '30 minutes'",
+        fetch="all"
+    ) or []
+    for r in expirados:
+        try:
+            cerrar_relay_timeout(r["numero_cliente"], twilio_send)
+        except Exception as e:
+            print(f"[RELAY] Error cerrando relay expirado {r['numero_cliente']}: {e}")
+
+
 def iniciar_recordatorios(twilio_send):
     def _loop():
         while True:
@@ -883,6 +897,7 @@ def iniciar_recordatorios(twilio_send):
                 _refresh_google_tokens()
                 _escalar_noshow_sin_respuesta(twilio_send)
                 _limpiar_conversaciones_expiradas()
+                _cerrar_relays_expirados(twilio_send)
             except Exception as e:
                 print(f"[RECORDATORIOS] Error: {e}")
             time.sleep(60)

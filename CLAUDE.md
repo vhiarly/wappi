@@ -106,14 +106,15 @@ pidiendo
 
 `item_pendiente_rebanado` (JSONB) es dual-purpose: guarda el item en `esperando_rebanado` y metadata de cantidad en `esperando_cantidad_libra`. Los estados son exclusivos — funciona pero la columna está semánticamente sobrecargada.
 
-### Timers
+### Timeouts (barridos de fondo, no timers en memoria)
 
-Dos sistemas de timer en memoria (se pierden en restart):
+No hay timers en memoria. El timeout se aplica por barridos de fondo que sobreviven restart, más la columna `timeout_en` en DB:
 
-- **`timers`** — timeout de conversación de pedidos. 180s de inactividad → `cancelar_por_timeout()`.
-- **`timers_relay`** — timeout de chat relay negocio↔cliente. 1800s (30 min).
+- **Pedidos** — Maverick (`maverick.py`, cada 5 min) hace `DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()`. Limpieza silenciosa (no notifica al cliente).
+- **Citas (conversación)** — `iniciar_recordatorios` (`flujo_citas.py`, cada 60s) borra conversaciones inactivas >30 min (salvo estados que esperan acción).
+- **Relay (chat negocio↔cliente)** — `_cerrar_relays_expirados` en el mismo loop de 60s cierra y notifica relays con `creado_en` >30 min (vía `cerrar_relay_timeout`).
 
-En restart: `DELETE FROM conversaciones_pedidos WHERE timeout_en < NOW()` limpia sesiones expiradas, pero sesiones activas pierden su timer hasta el próximo mensaje.
+Las funciones `detener_timer`/`reiniciar_timer`/`iniciar_timer_relay`/`cancelar_timer_relay` en `app.py` son **stubs no-op** que se conservan solo porque `flujo_pedidos`/`flujo_citas` los reciben como callbacks. No programan nada.
 
 ### Mensajes interactivos (botones y listas)
 
@@ -173,11 +174,13 @@ Chat directo entre negocio y cliente fuera del flujo estándar. Se activa con `c
 
 ```
 Repo:              github.com/vhiarly/wappi
-Deploy:            Azure App Service — wappi-rg, West Europe
-URL producción:    https://wappi.co
-Webhook endpoint:  POST https://wappi.co/webhook
+Deploy:            Azure App Service — wasapeame-rg, Canada Central
+URL producción:    https://wappi.do (+ https://wappi-gwbeheayascybpcv.canadacentral-01.azurewebsites.net)
+Webhook endpoint:  POST https://wappi.do/webhook
 META_WABA_ID:      1323108735812246
 Negocios activos:  SE1 (Pilar), ME1 (Dr. Jim Marmolejos), ME2 (Dr. Feris Olivero)
+Domain:            wappi.do (nic.do) → Azure Custom Domain (Secured, SNI SSL)
+Last Session:      2026-06-13 — Full rebrand wasapeame→wappi, DNS setup, SSL configured
 ```
 
 ---
