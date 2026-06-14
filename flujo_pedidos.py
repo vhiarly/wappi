@@ -556,14 +556,14 @@ def _resumen(items, pie=""):
 
 # ── Notificaciones ────────────────────────────────────────────────────────────
 
-def _notificar_posiciones(codigo, twilio_send):
+def _notificar_posiciones(codigo, meta_send):
     cola = _get_cola(codigo)
     for i, cliente in enumerate(cola[1:], start=1):
         s = "s" if i > 1 else ""
-        twilio_send(cliente, f"Avanzaste! Hay {i} puesto{s} antes que el tuyo.")
+        meta_send(cliente, f"Avanzaste! Hay {i} puesto{s} antes que el tuyo.")
 
 
-def _enviar_pedido_a_negocio(numero_negocio, numero_cliente, pedido, twilio_send, prefijo="NUEVO PEDIDO"):
+def _enviar_pedido_a_negocio(numero_negocio, numero_cliente, pedido, meta_send, prefijo="NUEVO PEDIDO"):
     puesto = pedido.get("turno", "?")
     txt  = f"{prefijo} — Puesto #P-{puesto} de {numero_cliente}\n\n"
     txt += "\n".join(_fmt(i) for i in pedido.get("items", []))
@@ -571,16 +571,16 @@ def _enviar_pedido_a_negocio(numero_negocio, numero_cliente, pedido, twilio_send
     txt += f"\nDireccion: {pedido.get('direccion', '')}"
     txt += f"\nReferencia: {pedido.get('referencia', '')}"
     txt += "\n\nSi algo no esta disponible escribe: no hay [producto]"
-    twilio_send(numero_negocio, txt)
+    meta_send(numero_negocio, txt)
 
 
 # ── Helper de cancelación con manejo de cola ──────────────────────────────────
 
-def _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send, notificar_negocio=False):
+def _ejecutar_cancelacion(numero_cliente, codigo, negocio, meta_send, notificar_negocio=False):
     cola = _get_cola(codigo)
     era_primero = bool(cola) and cola[0] == numero_cliente
     if notificar_negocio:
-        twilio_send(negocio["numero_negocio"], f"El cliente {numero_cliente} cancelo su pedido.")
+        meta_send(negocio["numero_negocio"], f"El cliente {numero_cliente} cancelo su pedido.")
     _eliminar_pedido(numero_cliente)
     _del_estado(numero_cliente)
     if era_primero:
@@ -589,9 +589,9 @@ def _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send, notifica
             siguiente = cola_actual[0]
             pedido_sig = _get_pedido(siguiente)
             _enviar_pedido_a_negocio(negocio["numero_negocio"], siguiente,
-                                     pedido_sig, twilio_send, prefijo="SIGUIENTE PEDIDO")
-            twilio_send(siguiente, "Tu pedido está siendo preparado, sale en unos minutos!")
-            _notificar_posiciones(codigo, twilio_send)
+                                     pedido_sig, meta_send, prefijo="SIGUIENTE PEDIDO")
+            meta_send(siguiente, "Tu pedido está siendo preparado, sale en unos minutos!")
+            _notificar_posiciones(codigo, meta_send)
     return "Orden cancelada. Escribe el codigo del negocio cuando quieras pedir de nuevo."
 
 
@@ -609,21 +609,21 @@ def limpiar_flujo(numero_cliente):
     _del_estado(numero_cliente)
 
 
-def cancelar_timeout(numero_cliente, twilio_send):
+def cancelar_timeout(numero_cliente, meta_send):
     estado = _get_estado(numero_cliente)
     if not estado:
         return
     codigo = estado["codigo"]
     negocio = obtener_negocio(codigo)
     if negocio:
-        _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send,
+        _ejecutar_cancelacion(numero_cliente, codigo, negocio, meta_send,
                               notificar_negocio=True)
     else:
         _eliminar_pedido(numero_cliente)
         _del_estado(numero_cliente)
 
 
-def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
+def manejar_pedido(numero_cliente, codigo, mensaje, meta_send, media_id=None):
     msg = _norm(mensaje)
 
     estado = _get_estado(numero_cliente)
@@ -659,7 +659,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
     _cancel_set = _CANCELAR_EXPLICITO if s in _ESTADOS_TEXTO_LIBRE else _CANCELAR
     if any(re.search(r"\b" + p + r"\b", msg) for p in _cancel_set):
         notificar = s in ("pedido_enviado", "esperando_decision")
-        return _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send,
+        return _ejecutar_cancelacion(numero_cliente, codigo, negocio, meta_send,
                                      notificar_negocio=notificar)
 
     # ── ESPERANDO MENÚ (bienvenida enviada, esperando botón) ──
@@ -1128,7 +1128,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
         )
         if not insertado:
             return "Hubo un error guardando tu pedido. Intenta de nuevo."
-        twilio_send(negocio["numero_negocio"],
+        meta_send(negocio["numero_negocio"],
             f"🛍️ NUEVO PEDIDO (RETIRO) — #{puesto}\n"
             + "\n".join(_fmt(i) for i in items)
             + f"\n\nTotal: RD${total:.0f}"
@@ -1195,7 +1195,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
 
         if posicion == 1:
             pedido = _get_pedido(numero_cliente)
-            _enviar_pedido_a_negocio(negocio["numero_negocio"], numero_cliente, pedido, twilio_send)
+            _enviar_pedido_a_negocio(negocio["numero_negocio"], numero_cliente, pedido, meta_send)
 
         instrucciones = negocio.get("instrucciones_pago", "")
         if instrucciones:
@@ -1219,7 +1219,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
         txt += f"\n\nTotal: ${sum(i['precio'] for i in items):.0f} pesos"
         txt += f"\nDireccion: {estado['direccion']}"
         txt += f"\nReferencia: {estado['referencia']}"
-        twilio_send(negocio["numero_negocio"], txt, media_id=media_id)
+        meta_send(negocio["numero_negocio"], txt, media_id=media_id)
 
         estado["estado"] = "pedido_enviado"
         _set_estado(numero_cliente, estado)
@@ -1236,7 +1236,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                     "• escribe un producto para agregarlo\n"
                     "• *listo* para confirmar los cambios")
         if msg == "2":
-            return _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send,
+            return _ejecutar_cancelacion(numero_cliente, codigo, negocio, meta_send,
                                          notificar_negocio=True)
         return ("*Tu pedido esta pendiente.*\n\n"
                 "1. Ajustar pedido\n"
@@ -1289,7 +1289,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
         if "continuar" in msg or msg == "1":
             items = [i for i in items if i["clave"] != item.get("clave")]
             if not items:
-                return _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send,
+                return _ejecutar_cancelacion(numero_cliente, codigo, negocio, meta_send,
                                              notificar_negocio=False)
 
             pedido = _get_pedido(numero_cliente)
@@ -1306,11 +1306,11 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             txt  = f"PEDIDO ACTUALIZADO de {numero_cliente} — se eliminó {nombre}\n\n"
             txt += "\n".join(_fmt(i) for i in items)
             txt += f"\n\nTotal: ${total:.0f} pesos"
-            twilio_send(negocio["numero_negocio"], txt)
+            meta_send(negocio["numero_negocio"], txt)
             return _resumen(items, "\n\nPedido actualizado. Tu orden sigue en camino.")
 
         if msg == "2":
-            return _ejecutar_cancelacion(numero_cliente, codigo, negocio, twilio_send,
+            return _ejecutar_cancelacion(numero_cliente, codigo, negocio, meta_send,
                                          notificar_negocio=True)
 
         return (f"Lo sentimos, *{nombre}* no está disponible.\n\n"
@@ -1333,7 +1333,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             txt += f"\n\nTotal: ${total:.0f} pesos"
             txt += f"\nDireccion: {estado['direccion']}"
             txt += f"\nReferencia: {estado['referencia']}"
-            twilio_send(negocio["numero_negocio"], txt)
+            meta_send(negocio["numero_negocio"], txt)
             return _resumen(items, "\n\nPedido actualizado y reenviado al negocio.")
 
         m = re.match(r"quitar\s+(.+)", msg)
@@ -1389,7 +1389,7 @@ def manejar_pedido(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
     return None
 
 
-def manejar_negocio(numero_negocio, codigo_negocio, mensaje, twilio_send):
+def manejar_negocio(numero_negocio, codigo_negocio, mensaje, meta_send):
     msg = _norm(mensaje)
 
     # "no hay [producto]"
@@ -1410,7 +1410,7 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, twilio_send):
                         estado["item_sin_stock"] = item
                         _set_estado(cliente, estado)
                     negocio = obtener_negocio(codigo_negocio)
-                    twilio_send(
+                    meta_send(
                         cliente,
                         f"Lo sentimos, *{item['nombre']}* no está disponible.\n\n"
                         f"1. Continuar sin {item['nombre']}\n"
@@ -1433,7 +1433,7 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, twilio_send):
         pedido_actual = _get_pedido(cliente_actual)
         puesto_actual = pedido_actual.get("turno", "?") if pedido_actual else "?"
 
-        twilio_send(cliente_actual, "🛵 Tu pedido está en camino!")
+        meta_send(cliente_actual, "🛵 Tu pedido está en camino!")
         execute(
             "UPDATE pedidos SET estado = 'despachado' WHERE numero_cliente = %s AND estado = 'pendiente'",
             (cliente_actual,)
@@ -1446,9 +1446,9 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, twilio_send):
 
         siguiente = cola_actual[0]
         pedido_sig = _get_pedido(siguiente)
-        _enviar_pedido_a_negocio(numero_negocio, siguiente, pedido_sig, twilio_send, prefijo="SIGUIENTE PEDIDO")
-        twilio_send(siguiente, "⏳ Tu pedido está siendo preparado")
-        _notificar_posiciones(codigo_negocio, twilio_send)
+        _enviar_pedido_a_negocio(numero_negocio, siguiente, pedido_sig, meta_send, prefijo="SIGUIENTE PEDIDO")
+        meta_send(siguiente, "⏳ Tu pedido está siendo preparado")
+        _notificar_posiciones(codigo_negocio, meta_send)
 
         puesto_sig = pedido_sig.get("turno", "?") if pedido_sig else "?"
         return f"✅ Puesto #P-{puesto_actual} despachado. Enviando #P-{puesto_sig} al siguiente."

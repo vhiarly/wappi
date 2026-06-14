@@ -111,7 +111,7 @@ def subir_media_meta(pdf_bytes, nombre_archivo):
     return r.json().get("id")
 
 
-def enviar_pdf_historia(transcripcion, historia, negocio, twilio_send, numero_destino):
+def enviar_pdf_historia(transcripcion, historia, negocio, meta_send, numero_destino):
     """Genera PDF, lo sube a Meta y lo envía como documento."""
     try:
         pdf_bytes = generar_pdf_historia(transcripcion, historia, negocio.get("nombre", "Historia Clinica"))
@@ -136,7 +136,7 @@ def enviar_pdf_historia(transcripcion, historia, negocio, twilio_send, numero_de
         return False
 
 
-def procesar_nota_voz_medica(media_id, negocio, twilio_send=None, numero_doctor=None):
+def procesar_nota_voz_medica(media_id, negocio, meta_send=None, numero_doctor=None):
     try:
         audio = descargar_audio_meta(media_id)
         if not audio:
@@ -149,8 +149,8 @@ def procesar_nota_voz_medica(media_id, negocio, twilio_send=None, numero_doctor=
         historia = estructurar_historia_clinica(transcripcion)
 
         # Enviar PDF si tenemos los datos necesarios
-        if twilio_send and numero_doctor:
-            enviado = enviar_pdf_historia(transcripcion, historia, negocio, twilio_send, numero_doctor)
+        if meta_send and numero_doctor:
+            enviado = enviar_pdf_historia(transcripcion, historia, negocio, meta_send, numero_doctor)
             if enviado:
                 return f"Transcripcion:\n{transcripcion}"
 

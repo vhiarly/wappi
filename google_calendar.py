@@ -230,7 +230,7 @@ def crear_cita_con_meet(
         raise RuntimeError("Google no devolvió hangoutLink. Verifica permisos del calendar.")
     return hangout_link
 
-# ── Helper: mensaje WhatsApp listo para Twilio ────────────────────────────────
+# ── Helper: mensaje WhatsApp listo para enviar por Meta ───────────────────────
 
 def mensaje_confirmacion_virtual(
     nombre_negocio: str,
@@ -238,7 +238,7 @@ def mensaje_confirmacion_virtual(
     inicio: datetime,
     hangout_link: str,
 ) -> str:
-    """Arma el texto de confirmación con el Meet link para enviar vía Twilio."""
+    """Arma el texto de confirmación con el Meet link para enviar por WhatsApp (Meta)."""
     DIAS_ES   = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
     MESES_ES  = ["enero","febrero","marzo","abril","mayo","junio",
                  "julio","agosto","septiembre","octubre","noviembre","diciembre"]

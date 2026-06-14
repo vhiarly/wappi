@@ -339,7 +339,7 @@ def _cerrar_relay(numero_cliente):
     execute("DELETE FROM sesiones_relay WHERE numero_cliente = %s", (numero_cliente,))
 
 
-def cerrar_relay_timeout(numero_cliente, twilio_send):
+def cerrar_relay_timeout(numero_cliente, meta_send):
     """Llamada por el timer de 30 min cuando el relay expira."""
     relay = _get_relay(numero_cliente)
     if not relay:
@@ -348,7 +348,7 @@ def cerrar_relay_timeout(numero_cliente, twilio_send):
     _cerrar_relay(numero_cliente)
 
     # Notificar a Pilar
-    twilio_send(
+    meta_send(
         relay["numero_negocio"],
         f"⏱ Sesión de chat con {numero_cliente} cerrada por tiempo. El cliente fue notificado."
     )
@@ -363,7 +363,7 @@ def cerrar_relay_timeout(numero_cliente, twilio_send):
             "UPDATE conversaciones_citas SET estado = 'esperando_resolucion_cliente' WHERE numero_cliente = %s",
             (numero_cliente,)
         )
-    twilio_send(
+    meta_send(
         numero_cliente,
         "No pudimos completar la coordinacion en el tiempo disponible.\n\n"
         "¿Qué prefieres hacer con tu cita?\n\n"
@@ -373,7 +373,7 @@ def cerrar_relay_timeout(numero_cliente, twilio_send):
     )
 
 
-def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
+def manejar_relay_mensaje(numero, mensaje, media_id, meta_send,
                            iniciar_timer_relay, cancelar_timer_relay):
     """
     Intercepta mensajes que pertenecen a una sesión relay activa.
@@ -406,7 +406,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
                 f"El cliente tiene *{horas:.1f} horas laborables* de anticipacion "
                 f"({'reembolso garantizado si rechazas' if politica else 'fuera de politica — reembolso a tu criterio'})"
             )
-            twilio_send(negocio_r["numero_negocio"],
+            meta_send(negocio_r["numero_negocio"],
                 f"📅 SOLICITUD DE REAGENDAR\n\n"
                 f"Cliente:  {numero}\n"
                 f"Servicio: {cita['nombre_servicio']}\n"
@@ -429,7 +429,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
                     ON CONFLICT (numero_cliente) DO UPDATE SET
                         codigo = EXCLUDED.codigo, estado = 'cancelacion_reembolso_garantizado'
                 """, (numero, cita["codigo"]))
-                twilio_send(negocio_r["numero_negocio"],
+                meta_send(negocio_r["numero_negocio"],
                     f"❌ CANCELACIÓN CON REEMBOLSO OBLIGATORIO\n\n"
                     f"Cliente:  {numero}\n"
                     f"Servicio: {cita['nombre_servicio']}\n"
@@ -453,7 +453,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
                     ON CONFLICT (numero_cliente) DO UPDATE SET
                         codigo = EXCLUDED.codigo, estado = 'cancelacion_criterio_negocio'
                 """, (numero, cita["codigo"]))
-                twilio_send(negocio_r["numero_negocio"],
+                meta_send(negocio_r["numero_negocio"],
                     f"❌ SOLICITUD DE CANCELACIÓN (fuera de politica)\n\n"
                     f"Cliente:  {numero}\n"
                     f"Servicio: {cita['nombre_servicio']}\n"
@@ -473,7 +473,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
 
     # ── No-show reportado por cliente ──
     if re.match(r"no\s+show(?:\s+[a-zA-Z]|$)", msg_low):
-        resultado = manejar_no_show_cliente(numero, mensaje, twilio_send)
+        resultado = manejar_no_show_cliente(numero, mensaje, meta_send)
         if resultado:
             return resultado
 
@@ -497,7 +497,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
                 "UPDATE conversaciones_citas SET estado = 'esperando_datos_reembolso' WHERE numero_cliente = %s",
                 (numero,)
             )
-            twilio_send(negocio_ns["numero_negocio"],
+            meta_send(negocio_ns["numero_negocio"],
                 f"El cliente {numero} eligio reembolso por no-show.")
             return (
                 "Para procesar tu reembolso necesito tus datos bancarios.\n\n"
@@ -517,14 +517,14 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
         negocio_c = obtener_negocio(conv_ns_cli["codigo"])
         if mensaje.strip() == "1":
             execute("UPDATE conversaciones_citas SET estado = 'noshow_cliente_reagendar_pendiente' WHERE numero_cliente = %s", (numero,))
-            twilio_send(negocio_c["numero_negocio"],
+            meta_send(negocio_c["numero_negocio"],
                 f"El cliente {numero} solicita reagendar tras no-show. "
                 f"Escribe *chat {numero.replace('whatsapp:+','')}* para coordinarse "
                 f"o *rechazar pago {numero.replace('whatsapp:+','')}* para cancelar sin reagendar.")
             return "Tu solicitud fue enviada al negocio. Te avisamos cuando respondan."
         if mensaje.strip() == "2":
             _del_estado_cita(numero)
-            twilio_send(negocio_c["numero_negocio"],
+            meta_send(negocio_c["numero_negocio"],
                 f"El cliente {numero} cancelo su cita (no-show del cliente). Cita cerrada.")
             return "Tu cita fue cancelada. Recuerda que el pago no es reembolsable en caso de no presentarse."
         return "Escribe *1* para reagendar o *2* para cancelar."
@@ -547,7 +547,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
                 WHERE numero_cliente = %s AND codigo = %s AND estado = 'confirmada'
                 ORDER BY agendado_en DESC LIMIT 1
             """, (numero, relay["codigo"]))
-            twilio_send(relay["numero_negocio"],
+            meta_send(relay["numero_negocio"],
                 f"✅ El cliente ({numero}) confirmo que se logro el contacto. No-show cerrado.")
             return (
                 "¡Genial! Nos alegra que hayan podido conectarse. "
@@ -558,7 +558,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
         if re.search(r"\bm[aá]s\s+tarde\b", msg_low):
             cancelar_timer_relay(numero)
             _cerrar_relay(numero)
-            twilio_send(relay["numero_negocio"],
+            meta_send(relay["numero_negocio"],
                 f"El cliente ({numero}) no puede hablar ahora. Sesión cerrada.")
             execute(
                 "UPDATE conversaciones_citas SET estado = 'esperando_resolucion_cliente' WHERE numero_cliente = %s",
@@ -572,7 +572,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
             )
 
         # Reenviar mensaje del cliente a Pilar
-        twilio_send(relay["numero_negocio"],
+        meta_send(relay["numero_negocio"],
             f"Cliente: {mensaje}", media_id=media_id)
         return ""  # no responder al cliente
 
@@ -585,17 +585,17 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
         negocio = obtener_negocio(conv["codigo"])
         if mensaje.strip() == "1":
             execute("UPDATE conversaciones_citas SET estado = 'esperando_confirmacion_negocio' WHERE numero_cliente = %s", (numero,))
-            twilio_send(negocio["numero_negocio"],
+            meta_send(negocio["numero_negocio"],
                 f"El cliente ({numero}) decidio mantener la cita.")
             return "Tu cita sigue en pie. Te confirmaremos el pago pronto."
         if mensaje.strip() == "2":
             _del_estado_cita(numero)
-            twilio_send(negocio["numero_negocio"],
+            meta_send(negocio["numero_negocio"],
                 f"El cliente ({numero}) quiere reagendar.")
             return "Para reagendar escribe el codigo del negocio y pasamos por el flujo de nuevo."
         if mensaje.strip() == "3":
             execute("UPDATE conversaciones_citas SET estado = 'esperando_datos_reembolso' WHERE numero_cliente = %s", (numero,))
-            twilio_send(negocio["numero_negocio"],
+            meta_send(negocio["numero_negocio"],
                 f"El cliente ({numero}) solicita reembolso.")
             return (
                 "Entendido. Para procesar tu reembolso necesito tus datos bancarios.\n\n"
@@ -616,7 +616,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
         servicio = negocio.get("servicios", {}).get(conv_r.get("servicio_clave"), {})
         tipo_cita = conv_r.get("tipo")
         monto = negocio.get("costo_online") if tipo_cita == "online" else negocio.get("costo_presencial")
-        twilio_send(
+        meta_send(
             negocio["numero_negocio"],
             f"💸 REEMBOLSO SOLICITADO\n\n"
             f"Cliente:  {numero}\n"
@@ -639,7 +639,7 @@ def manejar_relay_mensaje(numero, mensaje, media_id, twilio_send,
         # Buscar si es un reenvío (mensaje normal durante relay)
         for r in relays_negocio:
             if r["estado"] == "activo" and not re.match(r"cerrar\s+chat\s+\d+", msg_low):
-                twilio_send(r["numero_cliente"], mensaje, media_id=media_id)
+                meta_send(r["numero_cliente"], mensaje, media_id=media_id)
         return None  # Dejar que el flujo normal del negocio también procese sus comandos
 
     return None  # No aplica relay
@@ -756,7 +756,7 @@ def _enviar_recordatorio_template(numero, servicio, negocio, fecha_str, hora_str
         print(f"[TEMPLATE] Error enviando recordatorio a {numero}: {e}")
 
 
-def _verificar_recordatorios(twilio_send):
+def _verificar_recordatorios(meta_send):
     now = datetime.now(TZ_RD)
     citas = execute("""
         SELECT c.id, c.numero_cliente, c.nombre_servicio, c.fecha, c.hora,
@@ -819,7 +819,7 @@ def _refresh_google_tokens():
             print(f"[Google] Error refrescando token {fila['codigo']}: {e}")
 
 
-def _escalar_noshow_sin_respuesta(twilio_send):
+def _escalar_noshow_sin_respuesta(meta_send):
     """Escala no-shows donde Pilar no respondió en 2 horas."""
     relays = execute(
         "SELECT * FROM sesiones_relay WHERE estado='activo' "
@@ -829,7 +829,7 @@ def _escalar_noshow_sin_respuesta(twilio_send):
     for relay in relays:
         try:
             execute("DELETE FROM sesiones_relay WHERE numero_cliente=%s", (relay["numero_cliente"],))
-            twilio_send(relay["numero_negocio"],
+            meta_send(relay["numero_negocio"],
                 f"⏱ El relay con {relay['numero_cliente']} cerró por inactividad (2h sin respuesta).")
             conv = execute(
                 "SELECT 1 FROM conversaciones_citas WHERE numero_cliente=%s "
@@ -845,7 +845,7 @@ def _escalar_noshow_sin_respuesta(twilio_send):
                     ON CONFLICT (numero_cliente) DO UPDATE SET
                         codigo=EXCLUDED.codigo, estado='noshow_esperando_decision'
                 """, (relay["numero_cliente"], relay["codigo"]))
-            twilio_send(
+            meta_send(
                 relay["numero_cliente"],
                 f"No hemos podido contactar al negocio en 2 horas.\n\n"
                 f"¿Qué prefieres hacer?\n\n"
@@ -875,7 +875,7 @@ def _limpiar_conversaciones_expiradas():
     """)
 
 
-def _cerrar_relays_expirados(twilio_send):
+def _cerrar_relays_expirados(meta_send):
     """Cierra relays (chat negocio↔cliente) abiertos por más de 30 minutos."""
     expirados = execute(
         "SELECT numero_cliente FROM sesiones_relay "
@@ -884,20 +884,20 @@ def _cerrar_relays_expirados(twilio_send):
     ) or []
     for r in expirados:
         try:
-            cerrar_relay_timeout(r["numero_cliente"], twilio_send)
+            cerrar_relay_timeout(r["numero_cliente"], meta_send)
         except Exception as e:
             print(f"[RELAY] Error cerrando relay expirado {r['numero_cliente']}: {e}")
 
 
-def iniciar_recordatorios(twilio_send):
+def iniciar_recordatorios(meta_send):
     def _loop():
         while True:
             try:
-                _verificar_recordatorios(twilio_send)
+                _verificar_recordatorios(meta_send)
                 _refresh_google_tokens()
-                _escalar_noshow_sin_respuesta(twilio_send)
+                _escalar_noshow_sin_respuesta(meta_send)
                 _limpiar_conversaciones_expiradas()
-                _cerrar_relays_expirados(twilio_send)
+                _cerrar_relays_expirados(meta_send)
             except Exception as e:
                 print(f"[RECORDATORIOS] Error: {e}")
             time.sleep(60)
@@ -921,7 +921,7 @@ def _get_cita_confirmada(numero_cliente, codigo=None):
     )
 
 
-def manejar_no_show_cliente(numero_cliente, mensaje, twilio_send):
+def manejar_no_show_cliente(numero_cliente, mensaje, meta_send):
     """
     Cliente reporta que el negocio no se presentó.
     Detecta 'no show SE1' (código) o 'no show' (auto-detect).
@@ -964,10 +964,10 @@ def manejar_no_show_cliente(numero_cliente, mensaje, twilio_send):
             """, (numero_cliente, citas[0]["codigo"]))
             return "\n".join(lineas)
 
-    return _procesar_no_show_negocio(numero_cliente, cita, twilio_send)
+    return _procesar_no_show_negocio(numero_cliente, cita, meta_send)
 
 
-def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
+def _procesar_no_show_negocio(numero_cliente, cita, meta_send):
     """Procesa el no-show del negocio para una cita específica."""
     negocio = obtener_negocio(cita["codigo"])
 
@@ -996,7 +996,7 @@ def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
     if no_show_count >= 2:
         # Segunda vez — reembolso completo
         execute("UPDATE citas SET estado = 'cancelada' WHERE id = %s", (cita["id"],))
-        twilio_send(
+        meta_send(
             negocio["numero_negocio"],
             f"🚨 SEGUNDO NO-SHOW — REEMBOLSO REQUERIDO\n\n"
             f"Cliente: {numero_cliente}\n"
@@ -1014,7 +1014,7 @@ def _procesar_no_show_negocio(numero_cliente, cita, twilio_send):
         )
 
     # Primera vez — cliente decide qué quiere
-    twilio_send(
+    meta_send(
         negocio["numero_negocio"],
         f"🚨 NO-SHOW REPORTADO\n\n"
         f"Cliente: {numero_cliente}\n"
@@ -1132,7 +1132,7 @@ def _msg_confirmacion(estado, servicio, negocio):
     return r
 
 
-def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, twilio_send):
+def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, meta_send):
     fecha_dt = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
     execute("""
         INSERT INTO citas
@@ -1153,7 +1153,7 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
     tipo_linea = f"Tipo:     {tipo_txt}\n" if tipo_txt else ""
     lugar_txt  = f"Lugar:    {estado['lugar']}\n" if estado.get("lugar") else ""
     nota_txt   = f"Nota:     {estado['nota_paciente']}\n" if estado.get("nota_paciente") else ""
-    twilio_send(
+    meta_send(
         negocio["numero_negocio"],
         f"NUEVA CITA\n\n"
         f"Servicio: {servicio['nombre']}\n"
@@ -1164,7 +1164,7 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
         f"{nota_txt}"
     )
     if estado.get("nota_media_id"):
-        twilio_send(negocio["numero_negocio"], "Nota de voz del paciente:", media_id=estado["nota_media_id"], media_type="audio")
+        meta_send(negocio["numero_negocio"], "Nota de voz del paciente:", media_id=estado["nota_media_id"], media_type="audio")
 
     # Google Calendar
     meet_link = None
@@ -1190,9 +1190,9 @@ def _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, tw
                 msg1, msg2 = mensaje_confirmacion_virtual(
                     negocio["nombre"], servicio["nombre"], inicio, meet_link
                 )
-                twilio_send(numero_cliente, msg1)
+                meta_send(numero_cliente, msg1)
                 _time.sleep(1)
-                twilio_send(numero_cliente, msg2)
+                meta_send(numero_cliente, msg2)
         except Exception as e:
             print(f"[Google Calendar] Error para {codigo}: {e}")
 
@@ -1395,7 +1395,7 @@ def _enviar_flow_interactivo(numero_cliente, negocio):
         return False
 
 
-def manejar_flow_cita(numero_cliente, response_data, twilio_send):
+def manejar_flow_cita(numero_cliente, response_data, meta_send):
     """Procesa la respuesta de un WhatsApp Flow de citas y retoma el flujo."""
     estado = _get_estado_cita(numero_cliente)
     if not estado:
@@ -1436,7 +1436,7 @@ def manejar_flow_cita(numero_cliente, response_data, twilio_send):
     return txt
 
 
-def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
+def manejar_cita(numero_cliente, codigo, mensaje, meta_send, media_id=None):
     msg = mensaje.strip().lower()
 
     estado = _get_estado_cita(numero_cliente)
@@ -1474,7 +1474,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             _set_estado_cita(numero_cliente, estado)
             desc = negocio.get("descripcion", "")
             if desc:
-                twilio_send(numero_cliente, f"Bienvenido a *{negocio['nombre']}*\n\n{desc}")
+                meta_send(numero_cliente, f"Bienvenido a *{negocio['nombre']}*\n\n{desc}")
             enviado = _enviar_flow_interactivo(numero_cliente, negocio)
             if enviado:
                 return None  # Flow ya enviado, app.py no manda nada más
@@ -1496,7 +1496,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             label_presencial = "A domicilio" if es_domicilio else "Presencial"
             estado["estado"] = "esperando_tipo"
             _set_estado_cita(numero_cliente, estado)
-            twilio_send(numero_cliente, bienvenida)
+            meta_send(numero_cliente, bienvenida)
             enviado = _enviar_botones(numero_cliente,
                 "¿Cómo prefieres tu cita?",
                 [("online", "Online (Meet)"), ("presencial", label_presencial)])
@@ -1506,7 +1506,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                     f"1. Online (Google Meet)\n2. {label_presencial}\n\n"
                     "Escribe *1* o *2*. Escribe *cancelar* para salir.")
 
-        twilio_send(numero_cliente, bienvenida)
+        meta_send(numero_cliente, bienvenida)
         return _iniciar_servicio(numero_cliente, negocio, estado)
 
     # ── ESPERANDO TIPO ──
@@ -1650,7 +1650,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
             _set_estado_cita(numero_cliente, estado)
             enviado = _enviar_lista_dias(numero_cliente, negocio, servicio["duracion_minutos"], ep)
             if enviado:
-                twilio_send(numero_cliente, f"No hay horas disponibles el {nombre_dia}. Elige otro dia.")
+                meta_send(numero_cliente, f"No hay horas disponibles el {nombre_dia}. Elige otro dia.")
                 return None
             return f"No hay horas disponibles el {nombre_dia}. Elige otro dia.\n\n" + _txt_dias(negocio, servicio["duracion_minutos"], ep)
         enviado = _enviar_lista_horas(numero_cliente, negocio, fecha, servicio["duracion_minutos"], ep)
@@ -1838,10 +1838,10 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
                     + _txt_horario_lbtr()
                     + "\n\nEscribe *cancelar* si no desea continuar.")
 
-        meet_link = _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, twilio_send)
+        meet_link = _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, meta_send)
         _del_estado_cita(numero_cliente)
         msg = _msg_confirmacion(estado, servicio, negocio)
-        twilio_send(numero_cliente, msg)
+        meta_send(numero_cliente, msg)
         # Pin de ubicación nativo + botón Maps para citas presenciales
         if estado.get("tipo") == "presencial" and estado.get("lugar"):
             lugar_obj = next(
@@ -1902,7 +1902,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
 
         if valido is False:
             # Fraude detectado — notificar a Pilar y rechazar al cliente
-            twilio_send(
+            meta_send(
                 negocio["numero_negocio"],
                 f"⚠️ COMPROBANTE SOSPECHOSO — NO CONFIRMADO\n\n"
                 f"Servicio: {servicio['nombre']}\n"
@@ -1930,7 +1930,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
         aviso_lbtr = _aviso_lbtr(es_mismo_banco)
         aviso_txt  = f"\n\n{aviso_lbtr}" if aviso_lbtr else ""
 
-        twilio_send(
+        meta_send(
             negocio["numero_negocio"],
             f"💰 PAGO RECIBIDO — {estado_ia}\n\n"
             f"Servicio: {servicio['nombre']}\n"
@@ -1952,7 +1952,7 @@ def manejar_cita(numero_cliente, codigo, mensaje, twilio_send, media_id=None):
 
 # ── Flujo negocio ─────────────────────────────────────────────────────────────
 
-def manejar_negocio_citas(numero, mensaje, twilio_send,
+def manejar_negocio_citas(numero, mensaje, meta_send,
                            media_id=None, iniciar_timer_relay=None, cancelar_timer_relay=None):
     msg     = mensaje.strip()
     msg_low = msg.lower()
@@ -1991,7 +1991,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
             return "Ok, no se envio."
         numero_destino = re.sub(r"\D", "", msg)
         if len(numero_destino) >= 8:
-            twilio_send(f"+{numero_destino}", transcripcion_pendiente)
+            meta_send(f"+{numero_destino}", transcripcion_pendiente)
             return f"Enviado a +{numero_destino}."
         return "No entendi el numero. La transcripcion no fue enviada."
 
@@ -2004,7 +2004,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         if tipo_acc == "reagendar":
             if decision == "aprobar":
                 _del_estado_cita(num_cliente)
-                twilio_send(num_cliente,
+                meta_send(num_cliente,
                     f"✅ *{negocio['nombre']}* aprobó tu solicitud.\n\n"
                     f"Para elegir la nueva fecha escribe: *{negocio['codigo']}*")
                 return f"Reagendar aprobado. El cliente recibirá nuevas opciones al escribir el código."
@@ -2015,13 +2015,13 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
                     horas_r = _horas_laborales_hasta(cita_r["fecha"], str(cita_r["hora"])[:5], negocio)
                     if horas_r >= HORAS_LABORALES_LIMITE:
                         execute("UPDATE conversaciones_citas SET estado='esperando_datos_reembolso' WHERE numero_cliente=%s", (num_cliente,))
-                        twilio_send(num_cliente,
+                        meta_send(num_cliente,
                             f"*{negocio['nombre']}* no puede reagendar tu cita.\n\n"
                             f"Como cancelaste con suficiente anticipacion tienes derecho a reembolso completo.\n\n"
                             f"Envia tus datos:\n*Banco:* [nombre]\n*Cuenta:* [numero]\n*Titular:* [nombre]")
                         return f"Reagendar rechazado. Cliente notificado — reembolso garantizado por politica."
                 _del_estado_cita(num_cliente)
-                twilio_send(num_cliente,
+                meta_send(num_cliente,
                     f"*{negocio['nombre']}* no puede reagendar en este momento. "
                     f"Tu cita original sigue vigente. Disculpa los inconvenientes.")
                 return f"Reagendar rechazado. Cliente notificado — cita original vigente."
@@ -2029,13 +2029,13 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         else:  # reembolso
             if decision == "aprobar":
                 execute("UPDATE conversaciones_citas SET estado='esperando_datos_reembolso' WHERE numero_cliente=%s", (num_cliente,))
-                twilio_send(num_cliente,
+                meta_send(num_cliente,
                     f"✅ *{negocio['nombre']}* aprobó tu reembolso.\n\n"
                     f"Envia tus datos:\n*Banco:* [nombre]\n*Cuenta:* [numero]\n*Titular:* [nombre]")
                 return f"Reembolso aprobado. Cliente enviará sus datos bancarios."
             else:
                 _del_estado_cita(num_cliente)
-                twilio_send(num_cliente,
+                meta_send(num_cliente,
                     f"*{negocio['nombre']}* no aprobó el reembolso en este caso. "
                     f"Ver politica: wappi.do/descargo")
                 return f"Reembolso rechazado. Cliente notificado."
@@ -2070,7 +2070,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         else:
             execute("INSERT INTO conversaciones_citas (numero_cliente, codigo, estado) VALUES (%s, %s, 'noshow_cliente_esperando')",
                     (num_cliente, codigo))
-        twilio_send(
+        meta_send(
             num_cliente,
             f"*{negocio['nombre']}* reporta que no te presentaste a tu cita del "
             f"{cita['fecha']} a las {_fmt12(cita['hora'])}.\n\n"
@@ -2098,7 +2098,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         _abrir_relay(num_cliente, numero, codigo)
         if iniciar_timer_relay:
             iniciar_timer_relay(num_cliente)
-        twilio_send(
+        meta_send(
             num_cliente,
             f"*{negocio['nombre']}* quiere coordinarse contigo sobre tu cita. "
             f"Tienes *30 minutos* para responder.\n\n"
@@ -2142,16 +2142,16 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
 
         if msg_low == "1":
             if conv and servicio_r:
-                _procesar_confirmacion(codigo, num_cliente, conv, servicio_r, negocio, twilio_send)
+                _procesar_confirmacion(codigo, num_cliente, conv, servicio_r, negocio, meta_send)
             _del_estado_cita(num_cliente)
-            twilio_send(num_cliente, _msg_confirmacion(conv, servicio_r or {}, negocio))
+            meta_send(num_cliente, _msg_confirmacion(conv, servicio_r or {}, negocio))
             return f"✅ Cita de {num_corto} confirmada. El cliente fue notificado."
         else:
             execute(
                 "UPDATE conversaciones_citas SET estado = 'esperando_datos_reembolso' WHERE numero_cliente = %s",
                 (num_cliente,)
             )
-            twilio_send(
+            meta_send(
                 num_cliente,
                 "Lo sentimos, no fue posible mantener tu cita.\n\n"
                 "Para procesar tu reembolso necesito tus datos bancarios.\n\n"
@@ -2168,7 +2168,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         num_cliente = f"+{m_comp.group(1)}"
         if not media_id:
             return "Adjunta la foto del comprobante de reembolso con el mensaje."
-        twilio_send(
+        meta_send(
             num_cliente,
             "✅ Tu reembolso fue procesado. Aquí está el comprobante de la transferencia.",
             media_id=media_id,
@@ -2189,7 +2189,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
             return f"No encontre una cita pendiente de confirmacion para {num_corto}."
 
         if m_rechazar:
-            twilio_send(num_cliente,
+            meta_send(num_cliente,
                 "Tu pago no pudo ser verificado. Por favor contacta al negocio directamente.")
             _del_estado_cita(num_cliente)
             return f"Pago de {num_corto} rechazado. El cliente fue notificado."
@@ -2197,9 +2197,9 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         # Confirmar
         servicio_cita = negocio.get("servicios", {}).get(conv["servicio_clave"])
         if servicio_cita:
-            _procesar_confirmacion(codigo, num_cliente, conv, servicio_cita, negocio, twilio_send)
+            _procesar_confirmacion(codigo, num_cliente, conv, servicio_cita, negocio, meta_send)
         _del_estado_cita(num_cliente)
-        twilio_send(num_cliente, _msg_confirmacion(conv, servicio_cita or {}, negocio))
+        meta_send(num_cliente, _msg_confirmacion(conv, servicio_cita or {}, negocio))
         return f"✅ Cita de {num_corto} confirmada. El cliente fue notificado."
 
     # ── mis citas (sin especificar) ──
@@ -2313,7 +2313,7 @@ def manejar_negocio_citas(numero, mensaje, twilio_send,
         fecha_str = target["fecha"].isoformat() if hasattr(target["fecha"], "isoformat") else target["fecha"]
         cita_dt = datetime.strptime(f"{fecha_str} {target['hora']}", "%Y-%m-%d %H:%M")
         if cita_dt > datetime.now():
-            twilio_send(
+            meta_send(
                 target["numero_cliente"],
                 f"Tu cita de {target['nombre_servicio']} en {negocio['nombre']} "
                 f"el {fecha_str} a las {_fmt12(target['hora'])} fue cancelada.\n\n"
