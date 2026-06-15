@@ -1400,6 +1400,7 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, meta_send):
             "SELECT numero_cliente, items FROM pedidos WHERE codigo = %s AND estado = 'pendiente'",
             (codigo_negocio,), fetch="all"
         ) or []
+        notificados = []
         for pedido_row in reversed(pedidos_pendientes):
             cliente = pedido_row["numero_cliente"]
             for item in (pedido_row["items"] or []):
@@ -1409,14 +1410,16 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, meta_send):
                         estado["estado"] = "esperando_decision"
                         estado["item_sin_stock"] = item
                         _set_estado(cliente, estado)
-                    negocio = obtener_negocio(codigo_negocio)
                     meta_send(
                         cliente,
                         f"Lo sentimos, *{item['nombre']}* no está disponible.\n\n"
                         f"1. Continuar sin {item['nombre']}\n"
                         "2. Cancelar pedido"
                     )
-                    return f"Cliente notificado sobre {item['nombre']}."
+                    notificados.append(cliente)
+                    break  # un solo aviso por cliente aunque tenga el producto repetido
+        if notificados:
+            return f"{len(notificados)} cliente(s) notificado(s) sobre la falta de ese producto."
         return "No encontre pedidos pendientes con ese producto."
 
     # "listo" → pedido despachado
@@ -1429,6 +1432,8 @@ def manejar_negocio(numero_negocio, codigo_negocio, mensaje, meta_send):
         estado_actual = _get_estado(cliente_actual)
         if estado_actual and estado_actual.get("estado") == "esperando_decision":
             return "El pedido actual tiene un producto pendiente de decisión del cliente. Espera su respuesta."
+        if estado_actual and estado_actual.get("estado") == "esperando_comprobante":
+            return "El pedido actual aún no ha enviado el comprobante de pago. No se despachó."
 
         pedido_actual = _get_pedido(cliente_actual)
         puesto_actual = pedido_actual.get("turno", "?") if pedido_actual else "?"

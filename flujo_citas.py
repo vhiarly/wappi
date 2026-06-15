@@ -819,46 +819,6 @@ def _refresh_google_tokens():
             print(f"[Google] Error refrescando token {fila['codigo']}: {e}")
 
 
-def _escalar_noshow_sin_respuesta(meta_send):
-    """Escala no-shows donde Pilar no respondió en 2 horas."""
-    relays = execute(
-        "SELECT * FROM sesiones_relay WHERE estado='activo' "
-        "AND creado_en < NOW() - INTERVAL '2 hours' AND respondio = FALSE",
-        fetch="all"
-    ) or []
-    for relay in relays:
-        try:
-            execute("DELETE FROM sesiones_relay WHERE numero_cliente=%s", (relay["numero_cliente"],))
-            meta_send(relay["numero_negocio"],
-                f"⏱ El relay con {relay['numero_cliente']} cerró por inactividad (2h sin respuesta).")
-            conv = execute(
-                "SELECT 1 FROM conversaciones_citas WHERE numero_cliente=%s "
-                "AND estado='noshow_esperando_decision'",
-                (relay["numero_cliente"],), fetch="one"
-            )
-            if conv:
-                pass  # cliente ya tiene opciones
-            else:
-                execute("""
-                    INSERT INTO conversaciones_citas (numero_cliente, codigo, estado)
-                    VALUES (%s, %s, 'noshow_esperando_decision')
-                    ON CONFLICT (numero_cliente) DO UPDATE SET
-                        codigo=EXCLUDED.codigo, estado='noshow_esperando_decision'
-                """, (relay["numero_cliente"], relay["codigo"]))
-            meta_send(
-                relay["numero_cliente"],
-                f"No hemos podido contactar al negocio en 2 horas.\n\n"
-                f"¿Qué prefieres hacer?\n\n"
-                f"1. Mantener la cita como esta\n"
-                f"2. Reagendar\n"
-                f"3. Cancelar y solicitar reembolso\n\n"
-                f"wappi.do/descargo"
-            )
-            print(f"[No-show] Escalado: {relay['numero_cliente']}")
-        except Exception as e:
-            print(f"[No-show] Error escalando: {e}")
-
-
 def _limpiar_conversaciones_expiradas():
     """Elimina sesiones de agendamiento inactivas por más de 30 minutos."""
     execute("""
@@ -895,7 +855,6 @@ def iniciar_recordatorios(meta_send):
             try:
                 _verificar_recordatorios(meta_send)
                 _refresh_google_tokens()
-                _escalar_noshow_sin_respuesta(meta_send)
                 _limpiar_conversaciones_expiradas()
                 _cerrar_relays_expirados(meta_send)
             except Exception as e:
