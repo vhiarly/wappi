@@ -170,7 +170,12 @@ def validar_comprobante(media_id, monto_esperado, cuenta_ultimos4="0083"):
         )
 
         texto  = response.content[0].text.strip()
-        valido = texto.upper().startswith("VALIDO")
+        # Tolerante a tildes: "VÁLIDO" no debe leerse como inválido.
+        # (ojo: "INVALIDO"/"INVÁLIDO" no empiezan con "VALIDO", así que siguen siendo False)
+        _texto_norm = (texto.upper()
+                       .replace("Á", "A").replace("É", "E").replace("Í", "I")
+                       .replace("Ó", "O").replace("Ú", "U"))
+        valido = _texto_norm.startswith("VALIDO")
         razon  = texto.split("Razon:")[-1].split("Tipo:")[0].strip() if "Razon:" in texto else texto
 
         tipo_raw = ""
