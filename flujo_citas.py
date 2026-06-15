@@ -1461,7 +1461,13 @@ def manejar_cita(numero_cliente, codigo, mensaje, meta_send, media_id=None):
     if estado.get("servicio_clave"):
         servicio = negocio.get("servicios", {}).get(estado["servicio_clave"])
 
-    if re.search(r"\b(cancelar|cancel|salir|bye|chao)\b", msg):
+    # En estados que capturan texto libre (nombre/email/dirección/nota) solo cuenta
+    # cancelación explícita, para no cancelar con un email "chao@..." o un apellido "Chao".
+    _estados_captura = {"esperando_nombre", "esperando_email",
+                        "esperando_direccion_domicilio", "esperando_nota"}
+    _patron_cancel = (r"\b(cancelar|cancel)\b" if s in _estados_captura
+                      else r"\b(cancelar|cancel|salir|bye|chao)\b")
+    if re.search(_patron_cancel, msg):
         _del_estado_cita(numero_cliente)
         return "Reserva cancelada. Escribe el codigo del negocio cuando quieras agendar."
 
@@ -1838,6 +1844,18 @@ def manejar_cita(numero_cliente, codigo, mensaje, meta_send, media_id=None):
                     + _txt_horario_lbtr()
                     + "\n\nEscribe *cancelar* si no desea continuar.")
 
+        # Re-validar el slot justo antes de crear la cita (evita doble-booking
+        # si alguien tomó la hora entre que se mostró y se confirmó).
+        _ep = estado.get("tipo") == "presencial"
+        if _bloqueada(codigo, estado["dia"], estado["hora"], servicio["duracion_minutos"], _ep):
+            estado["estado"] = "esperando_hora"
+            _set_estado_cita(numero_cliente, estado)
+            _aviso = "Esa hora acaba de ser tomada. Por favor elige otra."
+            if _enviar_lista_horas(numero_cliente, negocio, estado["dia"], servicio["duracion_minutos"], _ep):
+                meta_send(numero_cliente, _aviso)
+                return None
+            return _aviso + "\n\n" + (_txt_horas(negocio, estado["dia"], servicio["duracion_minutos"], _ep) or "")
+
         meet_link = _procesar_confirmacion(codigo, numero_cliente, estado, servicio, negocio, meta_send)
         _del_estado_cita(numero_cliente)
         msg = _msg_confirmacion(estado, servicio, negocio)
@@ -2197,6 +2215,13 @@ def manejar_negocio_citas(numero, mensaje, meta_send,
         # Confirmar
         servicio_cita = negocio.get("servicios", {}).get(conv["servicio_clave"])
         if servicio_cita:
+            # Re-validar el slot: con comprobante puede haber pasado horas y otra
+            # cita pudo tomar la hora. No confirmar a ciegas → evita doble-booking.
+            _ep = conv.get("tipo") == "presencial"
+            if _bloqueada(codigo, conv["dia"], conv["hora"], servicio_cita["duracion_minutos"], _ep):
+                return (f"⚠️ El horario de {num_corto} ({_fmt12(conv['hora'])} del {conv.get('nombre_dia', conv['dia'])}) "
+                        f"ya fue tomado por otra cita confirmada. NO se confirmó para evitar doble reserva.\n\n"
+                        f"Coordina con el cliente: escribe *chat {num_corto}*.")
             _procesar_confirmacion(codigo, num_cliente, conv, servicio_cita, negocio, meta_send)
         _del_estado_cita(num_cliente)
         meta_send(num_cliente, _msg_confirmacion(conv, servicio_cita or {}, negocio))
@@ -2243,7 +2268,7 @@ def manejar_negocio_citas(numero, mensaje, meta_send,
         hasta = _parsear_hora(msg_low)
         if not hasta:
             return "No entendi la hora. Ejemplo: ocupado hasta 5pm"
-        ahora = datetime.now().strftime("%H:%M")
+        ahora = datetime.now(TZ_RD).strftime("%H:%M")
         if _hm(hasta) <= _hm(ahora):
             return "Esa hora ya paso. Hasta que hora quieres bloquear?"
         execute(
@@ -2254,7 +2279,7 @@ def manejar_negocio_citas(numero, mensaje, meta_send,
 
     # ── no disponible (resto del día) ──
     if re.search(r"\bno\s+disponible\b", msg_low):
-        ahora = datetime.now().strftime("%H:%M")
+        ahora = datetime.now(TZ_RD).strftime("%H:%M")
         execute(
             "INSERT INTO bloqueos (codigo, fecha, desde, hasta) VALUES (%s, %s, %s, %s)",
             (codigo, hoy, ahora, "23:59")
@@ -2311,8 +2336,8 @@ def manejar_negocio_citas(numero, mensaje, meta_send,
         execute("UPDATE citas SET estado = 'cancelada' WHERE id = %s", (target["id"],))
 
         fecha_str = target["fecha"].isoformat() if hasattr(target["fecha"], "isoformat") else target["fecha"]
-        cita_dt = datetime.strptime(f"{fecha_str} {target['hora']}", "%Y-%m-%d %H:%M")
-        if cita_dt > datetime.now():
+        cita_dt = datetime.strptime(f"{fecha_str} {target['hora']}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ_RD)
+        if cita_dt > datetime.now(TZ_RD):
             meta_send(
                 target["numero_cliente"],
                 f"Tu cita de {target['nombre_servicio']} en {negocio['nombre']} "
