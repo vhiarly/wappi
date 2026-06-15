@@ -36,17 +36,24 @@ az webapp deploy \
   --output none
 ok "Deploy completado"
 
-info "Esperando que el app reinicie..."
-for i in {1..12}; do
-  sleep 5
-  RESP=$(curl -sk --max-time 5 "$URL" 2>/dev/null || true)
+# Restart explícito: el zip-deploy de Azure a veces deja el worker colgado
+# (el health-check pasa sobre el worker viejo y luego el nuevo se cuelga).
+# Forzar el restart hace el deploy determinista.
+info "Reiniciando worker para evitar cuelgue post-deploy..."
+az webapp restart --name "$APP" --resource-group "$RG" --output none
+ok "Restart enviado"
+
+info "Esperando que el app levante (cold start incluido)..."
+for i in {1..20}; do
+  sleep 6
+  RESP=$(curl -sk --max-time 10 "$URL" 2>/dev/null || true)
   if [ "$RESP" = "$ESPERADO" ]; then
     ok "App respondiendo en $URL"
     break
   fi
-  echo "   intento $i/12..."
-  if [ $i -eq 12 ]; then
-    fail "App no responde después de 60s."
+  echo "   intento $i/20..."
+  if [ $i -eq 20 ]; then
+    fail "App no responde después de 2 min. Corre: az webapp restart --name $APP --resource-group $RG"
   fi
 done
 
