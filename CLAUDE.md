@@ -173,7 +173,7 @@ Chat directo entre negocio y cliente fuera del flujo estándar. Se activa con `c
 ## Quick Reference
 
 ```
-Repo:              github.com/vhiarly/wasapeame (remoto real; el deploy usa zip, no GitHub)
+Repo:              github.com/vhiarly/wappi (la vieja /wasapeame redirige; el deploy usa zip, no GitHub)
 Deploy:            Azure App Service — wasapeame-rg, Canada Central
 URL producción:    https://wappi.do (+ https://wappi-gwbeheayascybpcv.canadacentral-01.azurewebsites.net)
 Webhook endpoint:  POST https://wappi.do/webhook
