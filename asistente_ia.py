@@ -97,7 +97,7 @@ def consultar_ia(codigo, modo, mensaje):
         return "No pude procesar tu mensaje. Escribe ayuda para ver los comandos disponibles."
 
 
-def validar_comprobante(media_id, monto_esperado, cuenta_ultimos4="0083"):
+def validar_comprobante(media_id, monto_esperado, cuenta_ultimos4=None):
     """
     Analiza un comprobante de pago con Claude Vision.
     Retorna (valido: bool|None, razon: str, es_mismo_banco: bool|None).
@@ -126,6 +126,13 @@ def validar_comprobante(media_id, monto_esperado, cuenta_ultimos4="0083"):
 
         hoy = date.today().strftime("%d de %B de %Y").lower()
 
+        cuenta_txt = cuenta_ultimos4 or "la cuenta registrada del negocio"
+        criterio_cuenta = (
+            f"2. La cuenta destino/beneficiario termina en {cuenta_ultimos4}\n"
+            if cuenta_ultimos4 else
+            "2. La cuenta destino/beneficiario corresponde al negocio (no exijas digitos especificos)\n"
+        )
+
         client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -142,14 +149,14 @@ def validar_comprobante(media_id, monto_esperado, cuenta_ultimos4="0083"):
                         "text": (
                             f"Analiza este comprobante de transferencia bancaria dominicana.\n\n"
                             f"Puede ser de cualquiera de estos bancos:\n"
-                            f"- Banreservas: dice 'TRANSACCION PROCESADA', campo Destino muestra 'DOP *{cuenta_ultimos4}'\n"
-                            f"- BHD: dice 'Transaccion completada', campo Destino muestra nombre y termina en '{cuenta_ultimos4}'\n"
-                            f"- Popular: dice 'Tu transferencia ha sido realizada', campo Beneficiario muestra la cuenta completa terminando en '{cuenta_ultimos4}'\n\n"
+                            f"- Banreservas: dice 'TRANSACCION PROCESADA', campo Destino muestra 'DOP *{cuenta_txt}'\n"
+                            f"- BHD: dice 'Transaccion completada', campo Destino muestra nombre y termina en '{cuenta_txt}'\n"
+                            f"- Popular: dice 'Tu transferencia ha sido realizada', campo Beneficiario muestra la cuenta completa terminando en '{cuenta_txt}'\n\n"
                             f"Verifica TODOS estos criterios:\n"
                             f"1. El estado indica transaccion COMPLETADA/PROCESADA o EN PROCESO/PENDIENTE "
                             f"(las transferencias interbancarias LBTR pueden aparecer 'en proceso' hasta 8 minutos "
                             f"— ese estado es valido y legitimo. Las ACH interbancarias NO son aceptadas)\n"
-                            f"2. La cuenta destino/beneficiario termina en {cuenta_ultimos4}\n"
+                            f"{criterio_cuenta}"
                             f"3. El monto es aproximadamente {monto_esperado} DOP "
                             f"(acepta hasta 5% de diferencia por impuesto DGII 0.15%)\n"
                             f"4. La fecha es de hoy ({hoy}) o muy reciente (maximo 24h)\n"

@@ -1870,7 +1870,8 @@ def manejar_cita(numero_cliente, codigo, mensaje, meta_send, media_id=None):
         if negocio.get("test_mode"):
             valido, razon, es_mismo_banco = True, "Modo test — validación omitida", None
         else:
-            valido, razon, es_mismo_banco = validar_comprobante(media_id, monto_esp)
+            valido, razon, es_mismo_banco = validar_comprobante(
+                media_id, monto_esp, negocio.get("cuenta_pago_ultimos4"))
 
         tipo_txt  = "Online (Google Meet)" if tipo_cita == "online" else "Presencial"
         lugar_txt = f"\nLugar:    {estado['lugar']}" if estado.get("lugar") else ""
