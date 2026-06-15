@@ -210,6 +210,43 @@
             }
         }
 
+        async function loadCitas() {
+            try {
+                const resp = await fetch(`/cliente/api/citas`);
+                const data = await resp.json();
+                const container = document.getElementById('pedidos-list');
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">Sin citas aún</p>';
+                    return;
+                }
+
+                container.innerHTML = data.slice(0, 30).map(c => `
+                    <div class="bg-gray-50 rounded p-4 border">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <strong>${c.numero}</strong>
+                                <p class="text-gray-600 text-sm">${c.servicio || ''} — ${(c.fecha || c.dia || '')} ${c.hora || ''}</p>
+                            </div>
+                            <span class="px-2 py-1 rounded text-xs font-medium ${
+                                c.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
+                                c.tipo === 'activa' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-blue-100 text-blue-800'
+                            }">
+                                ${c.estado || c.tipo || ''}
+                            </span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error cargando citas:', e);
+            }
+        }
+
+        function loadPrincipal() {
+            if (modo === 'pedidos') { loadPedidos(); } else { loadCitas(); }
+        }
+
         async function loadProductos() {
             try {
                 const resp = await fetch(`/cliente/api/catalogo`);
@@ -333,14 +370,14 @@
 
         // Cargar al iniciar
         loadStats();
-        loadPedidos();
+        loadPrincipal();
         loadProductos();
         loadHorarios();
 
         // Recargar cada 30 segundos
         setInterval(() => {
             loadStats();
-            loadPedidos();
+            loadPrincipal();
         }, 30000);
     </script>
 
