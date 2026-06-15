@@ -240,6 +240,7 @@
                 `).join('');
             } catch (e) {
                 console.error('Error cargando citas:', e);
+                document.getElementById('pedidos-list').innerHTML = '<p class="text-red-600 text-sm">Error cargando citas</p>';
             }
         }
 

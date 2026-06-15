@@ -121,7 +121,7 @@ def api_pedidos(codigo):
 def api_citas(codigo):
     """JSON: Citas del día + próximas"""
     activas = execute(
-        "SELECT numero_cliente, servicio, dia, hora, actualizado_en FROM conversaciones_citas WHERE codigo = %s ORDER BY actualizado_en DESC LIMIT 10",
+        "SELECT numero_cliente, servicio_clave, dia, hora, actualizado_en FROM conversaciones_citas WHERE codigo = %s ORDER BY actualizado_en DESC LIMIT 10",
         (codigo,),
         fetch='all'
     )
@@ -130,7 +130,7 @@ def api_citas(codigo):
     for c in activas or []:
         result.append({
             "numero": c['numero_cliente'],
-            "servicio": c['servicio'],
+            "servicio": c['servicio_clave'],
             "dia": c['dia'],
             "hora": c['hora'],
             "actualizado": str(c['actualizado_en']),
