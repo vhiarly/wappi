@@ -173,14 +173,16 @@ Chat directo entre negocio y cliente fuera del flujo estándar. Se activa con `c
 ## Quick Reference
 
 ```
-Repo:              github.com/vhiarly/wappi
+Repo:              github.com/vhiarly/wasapeame (remoto real; el deploy usa zip, no GitHub)
 Deploy:            Azure App Service — wasapeame-rg, Canada Central
 URL producción:    https://wappi.do (+ https://wappi-gwbeheayascybpcv.canadacentral-01.azurewebsites.net)
 Webhook endpoint:  POST https://wappi.do/webhook
 META_WABA_ID:      1323108735812246
-Negocios activos:  SE1 (Pilar), ME1 (Dr. Jim Marmolejos), ME2 (Dr. Feris Olivero)
+Negocios activos:  citas → SE1 (Sir'Legal, único con requiere_comprobante), ME1 (Dr. Jim Marmolejos),
+                   ME2 (Dr. Feris Olivero), BA1 (Carlos Barbero) | pedidos → PA1 (Fresco del Horno), CO1 (Colmado El Ejemplo, demo)
+Negocios inactivos: ME3, SE2 (duplicados TEST), TST1 (prueba OAuth)
 Domain:            wappi.do (nic.do) → Azure Custom Domain (Secured, SNI SSL)
-Last Session:      2026-06-13 — Full rebrand wasapeame→wappi, DNS setup, SSL configured
+Last Session:      2026-06-15 — QA completo del core (seguridad, doble-booking, timezone, comprobante por negocio), Twilio eliminado, git reunificado
 ```
 
 ---

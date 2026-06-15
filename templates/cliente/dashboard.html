@@ -60,6 +60,9 @@
                 <button onclick="switchTab('analytics')" class="flex-1 px-6 py-4 font-medium text-gray-600 hover:text-gray-900" id="tab-analytics">
                     📊 Analytics PRO
                 </button>
+                <button onclick="switchTab('pago')" class="flex-1 px-6 py-4 font-medium text-gray-600 hover:text-gray-900" id="tab-pago">
+                    💳 Pagos
+                </button>
             </div>
 
             <!-- Tab: Pedidos/Citas -->
@@ -102,6 +105,19 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Tab: Pagos -->
+            <div id="tab-content-pago" class="p-6 hidden">
+                <div class="bg-gray-50 rounded-lg p-4 border max-w-md">
+                    <h3 class="font-medium text-gray-900 mb-2">Cuenta para validar comprobantes</h3>
+                    <p class="text-gray-600 text-sm mb-4">Últimos 4 dígitos de tu cuenta destino. La IA los usa para validar los comprobantes de pago de tus clientes. Déjalo vacío si no cobras por adelantado.</p>
+                    <div class="flex gap-2 items-center">
+                        <input id="pago-cuenta" type="text" maxlength="4" inputmode="numeric" placeholder="0083" class="border rounded px-3 py-2 w-32 text-lg tracking-widest"/>
+                        <button onclick="savePago()" class="bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700">Guardar</button>
+                    </div>
+                    <p id="pago-msg" class="text-sm mt-2"></p>
+                </div>
+            </div>
         </div>
 
     </div>
@@ -111,7 +127,7 @@
         const modo = '{{ modo }}';
 
         function switchTab(tab) {
-            ['pedidos', 'productos', 'horarios', 'analytics'].forEach(t => {
+            ['pedidos', 'productos', 'horarios', 'analytics', 'pago'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
                 document.getElementById(`tab-content-${t}`).classList.add('hidden');
             });
@@ -121,6 +137,32 @@
             if (tab === 'analytics') {
                 loadAnalytics();
             }
+            if (tab === 'pago') {
+                loadPago();
+            }
+        }
+
+        async function loadPago() {
+            try {
+                const resp = await fetch(`/cliente/api/pago`);
+                const data = await resp.json();
+                document.getElementById('pago-cuenta').value = data.cuenta_pago_ultimos4 || '';
+            } catch (e) { console.error('Error cargando pago:', e); }
+        }
+
+        async function savePago() {
+            const cuenta = document.getElementById('pago-cuenta').value.trim();
+            const msg = document.getElementById('pago-msg');
+            try {
+                const resp = await fetch(`/cliente/api/pago`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cuenta_pago_ultimos4: cuenta })
+                });
+                const data = await resp.json();
+                if (resp.ok) { msg.textContent = '✓ Guardado'; msg.className = 'text-sm mt-2 text-green-600'; }
+                else { msg.textContent = data.error || 'Error al guardar'; msg.className = 'text-sm mt-2 text-red-600'; }
+            } catch (e) { msg.textContent = 'Error de red'; msg.className = 'text-sm mt-2 text-red-600'; }
         }
 
         async function loadStats() {

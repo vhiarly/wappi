@@ -268,3 +268,35 @@ def api_horarios_update(codigo, dia):
     )
 
     return jsonify({"ok": True})
+
+
+@cliente_bp.route('/api/pago')
+@require_cliente
+def api_pago(codigo):
+    """JSON: configuración de cobro del negocio"""
+    neg = execute(
+        "SELECT cuenta_pago_ultimos4, requiere_comprobante FROM negocios WHERE codigo = %s",
+        (codigo,),
+        fetch='one'
+    )
+    if not neg:
+        return jsonify({"error": "Negocio no encontrado"}), 404
+    return jsonify({
+        "cuenta_pago_ultimos4": neg.get('cuenta_pago_ultimos4') or "",
+        "requiere_comprobante": neg.get('requiere_comprobante'),
+    })
+
+
+@cliente_bp.route('/api/pago', methods=['POST'])
+@require_cliente
+def api_pago_update(codigo):
+    """Actualizar los últimos 4 dígitos de la cuenta de cobro (para validar comprobantes)"""
+    data = request.json or {}
+    cuenta = (data.get('cuenta_pago_ultimos4') or "").strip()
+    if cuenta and (not cuenta.isdigit() or len(cuenta) != 4):
+        return jsonify({"error": "Deben ser exactamente 4 dígitos"}), 400
+    execute(
+        "UPDATE negocios SET cuenta_pago_ultimos4 = %s WHERE codigo = %s",
+        (cuenta or None, codigo)
+    )
+    return jsonify({"ok": True})
