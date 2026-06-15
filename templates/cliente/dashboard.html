@@ -90,11 +90,11 @@
             <div id="tab-content-analytics" class="p-6 hidden">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-gray-50 rounded-lg p-4 border">
-                        <h3 class="font-medium text-gray-900 mb-4">Resumen Hoy</h3>
+                        <h3 class="font-medium text-gray-900 mb-4" id="chart-resumen-title">Resumen Hoy</h3>
                         <canvas id="chart-resumen"></canvas>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-4 border">
-                        <h3 class="font-medium text-gray-900 mb-4">Estado de Conversaciones</h3>
+                        <h3 class="font-medium text-gray-900 mb-4" id="chart-estado-title">Estado de Conversaciones</h3>
                         <canvas id="chart-estado"></canvas>
                     </div>
                 </div>
@@ -309,61 +309,82 @@
             }
         }
 
-        async function loadAnalytics() {
+        const _charts = {};
+        function _drawChart(id, config) {
+            const ctx = document.getElementById(id).getContext('2d');
+            if (_charts[id]) { _charts[id].destroy(); }
+            _charts[id] = new Chart(ctx, config);
+        }
+        function _card(label, value, color) {
+            return `<div class="bg-white rounded p-4"><p class="text-gray-600 text-sm">${label}</p><p class="text-2xl font-bold ${color}">${value}</p></div>`;
+        }
+
+        function loadAnalytics() {
+            if (modo === 'pedidos') { loadAnalyticsPedidos(); } else { loadAnalyticsCitas(); }
+        }
+
+        async function loadAnalyticsPedidos() {
+            document.getElementById('chart-resumen-title').textContent = 'Resumen Hoy';
+            document.getElementById('chart-estado-title').textContent = 'Estado de Conversaciones';
             try {
                 const [actividad, estados] = await Promise.all([
                     fetch(`/api/pro/analytics/actividad?codigo=${codigo}`).then(r => r.json()),
                     fetch(`/api/pro/analytics/estado-conversaciones?codigo=${codigo}`).then(r => r.json())
                 ]);
-
-                // Gráfico de resumen hoy
-                const ctxResumen = document.getElementById('chart-resumen').getContext('2d');
-                new Chart(ctxResumen, {
+                _drawChart('chart-resumen', {
                     type: 'bar',
-                    data: {
-                        labels: ['Completados', 'En progreso'],
-                        datasets: [{
-                            label: 'Conversaciones',
-                            data: [actividad.pedidos_completados || 0, actividad.conversaciones_activas || 0],
-                            backgroundColor: ['#10b981', '#f59e0b']
-                        }]
-                    },
-                    options: { responsive: true, plugins: { legend: { display: true } } }
+                    data: { labels: ['Completados', 'En progreso'], datasets: [{ label: 'Pedidos', data: [actividad.pedidos_completados || 0, actividad.conversaciones_activas || 0], backgroundColor: ['#10b981', '#f59e0b'] }] },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
                 });
-
-                // Gráfico de estados
-                const ctxEstado = document.getElementById('chart-estado').getContext('2d');
                 const estadosData = estados.resumen_por_estado || {};
-                new Chart(ctxEstado, {
+                _drawChart('chart-estado', {
                     type: 'doughnut',
-                    data: {
-                        labels: Object.keys(estadosData),
-                        datasets: [{
-                            data: Object.values(estadosData),
-                            backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']
-                        }]
-                    },
-                    options: { responsive: true, plugins: { legend: { display: true } } }
+                    data: { labels: Object.keys(estadosData), datasets: [{ data: Object.values(estadosData), backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'] }] },
+                    options: { responsive: true }
                 });
-
-                // Stats
-                const statsContainer = document.getElementById('analytics-stats');
-                statsContainer.innerHTML = `
-                    <div class="bg-white rounded p-4">
-                        <p class="text-gray-600 text-sm">Pedidos Hoy</p>
-                        <p class="text-2xl font-bold text-blue-600">${actividad.pedidos_completados || 0}</p>
-                    </div>
-                    <div class="bg-white rounded p-4">
-                        <p class="text-gray-600 text-sm">Activos Ahora</p>
-                        <p class="text-2xl font-bold text-yellow-600">${actividad.conversaciones_activas || 0}</p>
-                    </div>
-                    <div class="bg-white rounded p-4">
-                        <p class="text-gray-600 text-sm">Total Estado</p>
-                        <p class="text-2xl font-bold text-green-600">${estados.total || 0}</p>
-                    </div>
-                `;
+                document.getElementById('analytics-stats').innerHTML =
+                    _card('Pedidos Hoy', actividad.pedidos_completados || 0, 'text-blue-600') +
+                    _card('Activos Ahora', actividad.conversaciones_activas || 0, 'text-yellow-600') +
+                    _card('Total Estado', estados.total || 0, 'text-green-600');
             } catch (e) {
                 console.error('Error cargando analytics:', e);
+                document.getElementById('analytics-stats').innerHTML = '<p class="text-red-600 text-sm">Error cargando datos</p>';
+            }
+        }
+
+        async function loadAnalyticsCitas() {
+            document.getElementById('chart-resumen-title').textContent = 'Horas pico';
+            document.getElementById('chart-estado-title').textContent = 'Citas por estado';
+            try {
+                const [resumen, estado, horas, servicios] = await Promise.all([
+                    fetch(`/api/pro/analytics/citas-resumen?codigo=${codigo}`).then(r => r.json()),
+                    fetch(`/api/pro/analytics/citas-estado?codigo=${codigo}`).then(r => r.json()),
+                    fetch(`/api/pro/analytics/citas-horas?codigo=${codigo}`).then(r => r.json()),
+                    fetch(`/api/pro/analytics/citas-servicios?codigo=${codigo}`).then(r => r.json())
+                ]);
+                const h = horas.horas || [];
+                _drawChart('chart-resumen', {
+                    type: 'bar',
+                    data: { labels: h.map(x => x.hora), datasets: [{ label: 'Citas', data: h.map(x => x.cantidad), backgroundColor: '#3b82f6' }] },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
+                });
+                const estadosData = estado.resumen_por_estado || {};
+                _drawChart('chart-estado', {
+                    type: 'doughnut',
+                    data: { labels: Object.keys(estadosData), datasets: [{ data: Object.values(estadosData), backgroundColor: ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6'] }] },
+                    options: { responsive: true }
+                });
+                const top = (servicios.servicios && servicios.servicios[0]) ? servicios.servicios[0].nombre : '—';
+                document.getElementById('analytics-stats').innerHTML =
+                    _card('Hoy', resumen.confirmadas_hoy || 0, 'text-blue-600') +
+                    _card('Esta semana', resumen.confirmadas_semana || 0, 'text-green-600') +
+                    _card('Ingresos mes (est.)', '$' + (resumen.ingresos_mes_estimado || 0).toLocaleString(), 'text-green-600') +
+                    _card('No-shows', resumen.no_shows || 0, 'text-red-600') +
+                    _card('Canceladas', resumen.canceladas || 0, 'text-yellow-600') +
+                    _card('Clientes (30d)', resumen.clientes_30d || 0, 'text-blue-600') +
+                    _card('Servicio top', top, 'text-purple-600');
+            } catch (e) {
+                console.error('Error cargando analytics citas:', e);
                 document.getElementById('analytics-stats').innerHTML = '<p class="text-red-600 text-sm">Error cargando datos</p>';
             }
         }
