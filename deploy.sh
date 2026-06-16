@@ -22,7 +22,7 @@ info "Deployando: $COMMIT"
 info "Creando zip..."
 rm -f "$ZIP"
 zip -r "$ZIP" . \
-  -x "*.git*" ".DS_Store" ".env" "__pycache__/*" "*.pyc" "*.sh" "deploy.sh" \
+  -x "*.git*" ".DS_Store" ".env" "__pycache__/*" "*.pyc" "*.sh" "deploy.sh" "*.zip" \
   > /dev/null
 ok "Zip creado ($(du -sh $ZIP | cut -f1))"
 

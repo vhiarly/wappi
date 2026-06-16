@@ -131,7 +131,7 @@ _enviar_lista_horas(numero, negocio, fecha, duracion_min, es_presencial)
 
 Las respuestas llegan como `msg_type = "interactive"` con `button_reply.id` o `list_reply.id`. `app.py` las normaliza en `body_raw` y las procesa igual que texto, con `is_interactive_id = True` para saltar la sanitización de markdown.
 
-El código de `manejar_flow_cita` y `crear_flow_negocio.py` existe en el repo pero **no está activo** — quedó de un experimento con WhatsApp Flows que no se llegó a usar.
+`manejar_flow_cita` (flujo_citas.py:1357) **sí está activo** — se invoca en `app.py:278` cuando llega un `nfm_reply` (ruta 4 del webhook). `crear_flow_negocio.py` sí es código muerto: quedó de un experimento con WhatsApp Flows y no se importa en ningún lado.
 
 ### Transcripción médica (`transcripcion_medica.py`)
 
@@ -165,7 +165,7 @@ Chat directo entre negocio y cliente fuera del flujo estándar. Se activa con `c
 - Estados deben ser strings simples, no objetos anidados.
 - `inventario.py` es código muerto — no importado en ningún lado.
 - `negocios.json` nunca es fuente de verdad para datos en vivo.
-- `twilio` sigue en `requirements.txt` pero **no se usa** — puede eliminarse en limpieza futura.
+- `twilio` ya fue eliminado del proyecto (no está en `requirements.txt` ni en el código).
 - Webhook responde siempre `200 OK` aunque haya error interno (Meta reintenta si recibe != 200).
 
 ---
