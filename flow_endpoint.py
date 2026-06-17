@@ -102,7 +102,8 @@ def _manejar(decrypted):
         # Vienen de PRODUCTOS → ir al checkout (datos de entrega)
         if screen == "PRODUCTOS":
             return {"screen": "ENTREGA", "data": {
-                "resumen": "Completa tus datos para la entrega:",
+                "productos_sel": data.get("productos") or [],
+                "codigo": codigo,
             }}
 
     # Fallback seguro
