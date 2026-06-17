@@ -1307,6 +1307,7 @@ def _enviar_lista_horas(numero_cliente, negocio, fecha, duracion_min, es_presenc
     horas = _horas_del_dia(negocio, fecha, duracion_min, es_presencial)
     if not horas:
         return False
+    horas = horas[:10]
     filas = [(h, _fmt12(h), "") for h in horas]
     return _enviar_lista(numero_cliente, "Horas disponibles:", filas, "Ver horas")
 
