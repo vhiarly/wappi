@@ -184,7 +184,7 @@ def _txt_servicios(negocio, tipo=None, categoria=None):
         lineas.append(f"\nCosto de consultoría: *${negocio['costo_online']:,} DOP*")
     elif tipo == "presencial" and negocio.get("costo_presencial"):
         lineas.append(f"\nCosto de consultoría: *${negocio['costo_presencial']:,} DOP*")
-    lineas += ["", "Escribe el *numero* del servicio o *cancelar* para salir."]
+    lineas += ["", "Escribe el *número* del servicio."]
     return "\n".join(lineas)
 
 
@@ -227,7 +227,7 @@ def _txt_dias(negocio, duracion_min, es_presencial=False):
     lineas = ["Dias disponibles:\n"]
     for i, (_, nombre, display) in enumerate(dias, 1):
         lineas.append(f"{i}. {nombre} {display}")
-    lineas.append("\nEscribe el *numero* del dia o *cancelar* para salir.")
+    lineas.append("\nEscribe el *número* del día.")
     return "\n".join(lineas)
 
 def _txt_horas(negocio, fecha, duracion_min, es_presencial=False):
@@ -237,7 +237,7 @@ def _txt_horas(negocio, fecha, duracion_min, es_presencial=False):
     lineas = ["Horas disponibles:\n"]
     for i, h in enumerate(horas, 1):
         lineas.append(f"{i}. {_fmt12(h)}")
-    lineas.append("\nEscribe el *numero* de la hora o *cancelar* para salir.")
+    lineas.append("\nEscribe el *número* de la hora.")
     return "\n".join(lineas)
 
 
@@ -1801,9 +1801,11 @@ def manejar_cita(numero_cliente, codigo, mensaje, meta_send, media_id=None):
         if negocio.get("requiere_comprobante") and negocio.get("instrucciones_pago"):
             estado["estado"] = "esperando_comprobante"
             _set_estado_cita(numero_cliente, estado)
-            return (negocio["instrucciones_pago"]
-                    + _txt_horario_lbtr()
-                    + "\n\nEscribe *cancelar* si no desea continuar.")
+            txt = negocio["instrucciones_pago"] + _txt_horario_lbtr()
+            enviado = _enviar_botones(numero_cliente, txt, [("continuar", "Continuar"), ("cancelar", "Cancelar")])
+            if enviado:
+                return None
+            return txt + "\n\n1. Continuar\n2. Cancelar"
 
         # Re-validar el slot justo antes de crear la cita (evita doble-booking
         # si alguien tomó la hora entre que se mostró y se confirmó).
@@ -2050,16 +2052,15 @@ def manejar_negocio_citas(numero, mensaje, meta_send,
         else:
             execute("INSERT INTO conversaciones_citas (numero_cliente, codigo, estado) VALUES (%s, %s, 'noshow_cliente_esperando')",
                     (num_cliente, codigo))
-        meta_send(
-            num_cliente,
-            f"*{negocio['nombre']}* reporta que no te presentaste a tu cita del "
-            f"{cita['fecha']} a las {_fmt12(cita['hora'])}.\n\n"
-            f"El pago realizado no es reembolsable en caso de ausencia del cliente.\n\n"
-            f"¿Qué deseas hacer?\n"
-            f"1. Solicitar reagendar (sujeto a aprobacion del negocio)\n"
-            f"2. Cancelar la cita\n\n"
-            f"wappi.do/descargo"
-        )
+        txt = (f"*{negocio['nombre']}* reporta que no te presentaste a tu cita del "
+               f"{cita['fecha']} a las {_fmt12(cita['hora'])}.\n\n"
+               f"El pago realizado no es reembolsable en caso de ausencia del cliente.\n\n"
+               f"¿Qué deseas hacer?\n\n"
+               f"wappi.do/descargo")
+        enviado = _enviar_botones(num_cliente, txt,
+            [("1", "Reagendar"), ("2", "Cancelar")])
+        if not enviado:
+            meta_send(num_cliente, txt + "\n\n1. Reagendar\n2. Cancelar")
         return f"Cliente {m_ns.group(1)} notificado. Espera su respuesta."
 
     # ── chat [número] — abrir relay (solo si hay pago pendiente de confirmar) ──
