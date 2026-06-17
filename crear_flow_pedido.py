@@ -48,7 +48,11 @@ def flow_json():
                 "id": "CATEGORIAS",
                 "title": "Haz tu pedido",
                 "data": {"categorias": {"type": "array", "items": arr_item,
-                                        "__example__": [{"id": "Postres", "title": "Postres"}]}},
+                                        "__example__": [
+                                            {"id": "Postres", "title": "Postres"},
+                                            {"id": "Pasteles Enteros", "title": "Pasteles Enteros"},
+                                            {"id": "Combos", "title": "Combos"},
+                                            {"id": "Especiales", "title": "Especiales"}]}},
                 "layout": {"type": "SingleColumnLayout", "children": [
                     {"type": "Form", "name": "form", "children": [
                         {"type": "RadioButtonsGroup", "name": "categoria",
@@ -64,7 +68,10 @@ def flow_json():
                 "id": "PRODUCTOS",
                 "title": "Productos",
                 "data": {"productos": {"type": "array", "items": arr_item,
-                                       "__example__": [{"id": "x", "title": "Producto RD$100"}]}},
+                                       "__example__": [
+                                           {"id": "lemon", "title": "Lemon Pie Cake RD$3500"},
+                                           {"id": "cakevlova", "title": "Cakevlova RD$2500"},
+                                           {"id": "brownies", "title": "2 Mini Brownies RD$200"}]}},
                 "layout": {"type": "SingleColumnLayout", "children": [
                     {"type": "Form", "name": "form", "children": [
                         {"type": "CheckboxGroup", "name": "productos",
@@ -90,7 +97,7 @@ def flow_json():
                         {"type": "TextInput", "name": "direccion", "label": "Dirección", "required": True},
                         {"type": "TextInput", "name": "sector", "label": "Sector / Zona", "required": True},
                         {"type": "TextInput", "name": "referencia", "label": "Punto de referencia", "required": False},
-                        {"type": "TextArea", "name": "detalles", "label": "Cantidades / detalles", "required": False},
+                        {"type": "TextArea", "name": "detalles", "label": "Cantidad/detalles", "required": False},
                         {"type": "RadioButtonsGroup", "name": "metodo_pago", "label": "Método de pago",
                          "data-source": [{"id": "efectivo", "title": "Efectivo"},
                                          {"id": "transferencia", "title": "Transferencia"}],
