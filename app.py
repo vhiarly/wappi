@@ -59,6 +59,14 @@ app.register_blueprint(oauth_bp, url_prefix='/oauth')
 app.register_blueprint(admin_bp)
 app.register_blueprint(cliente_bp)
 
+# Endpoint de WhatsApp Flow dinámico (pedidos)
+try:
+    from flow_endpoint import flow_bp
+    app.register_blueprint(flow_bp)
+    print("✅ Flow endpoint registrado")
+except Exception as e:
+    print(f"⚠️ Flow endpoint no disponible: {e}")
+
 # Registrar blueprints PRO si están disponibles
 if pro_features.get('analytics'):
     try:
