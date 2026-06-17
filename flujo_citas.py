@@ -1274,6 +1274,7 @@ def _enviar_lista_servicios(numero_cliente, negocio, categoria=None):
         servicios = [(c, sv) for c, sv in servicios if sv.get("categoria") == categoria]
     if not servicios:
         return False
+    servicios = servicios[:10]
     filas = [(clave, sv["nombre"], sv.get("descripcion") or f"{sv['duracion_minutos']} min")
              for clave, sv in servicios]
     return _enviar_lista(numero_cliente, "Elige tu servicio:", filas, "Ver servicios")
