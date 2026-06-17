@@ -48,6 +48,7 @@ try:
     execute("CREATE TABLE IF NOT EXISTS clientes (numero TEXT PRIMARY KEY, nombre TEXT, email TEXT)")
     execute("ALTER TABLE conversaciones_registro ADD COLUMN IF NOT EXISTS datos JSONB NOT NULL DEFAULT '{}'")
     execute("ALTER TABLE negocios ADD COLUMN IF NOT EXISTS cuenta_pago_ultimos4 VARCHAR(4)")
+    execute("CREATE TABLE IF NOT EXISTS mensajes_entrantes (id SERIAL PRIMARY KEY, payload JSONB, creado_en TIMESTAMP DEFAULT NOW())")
 except:
     pass
 
@@ -244,6 +245,13 @@ def webhook():
             return jsonify({"status": "invalid signature"}), 403
 
         data = request.get_json(silent=True) or {}
+
+        # Guardar payload crudo de TODO lo que llega al webhook (auditoría / recuperar códigos)
+        try:
+            import json as __json
+            execute("INSERT INTO mensajes_entrantes (payload) VALUES (%s::jsonb)", (__json.dumps(data),))
+        except Exception:
+            pass
 
         # Extraer mensaje de la estructura de Meta Cloud API
         is_interactive_id = False

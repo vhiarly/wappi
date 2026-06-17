@@ -7,6 +7,7 @@ import re
 import json
 import random
 import string
+import requests
 from db import execute
 
 DIAS_SEMANA = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
@@ -39,6 +40,42 @@ def _del(numero):
 
 def tiene_flujo_registro(numero):
     return _get(numero) is not None
+
+
+# ── Interactivos nativos (botones) ──────────────────────────────────────────────
+
+def _enviar_botones(numero, texto, botones):
+    """Envía botones interactivos nativos de WhatsApp. botones: [(id, titulo), ...] máx 3."""
+    token    = os.getenv("META_ACCESS_TOKEN")
+    phone_id = os.getenv("META_PHONE_NUMBER_ID")
+    phone    = numero.replace("+", "").strip()
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": texto[:1024]},
+            "action": {"buttons": [
+                {"type": "reply", "reply": {"id": bid, "title": titulo[:20]}}
+                for bid, titulo in botones[:3]
+            ]},
+        },
+    }
+    try:
+        requests.post(
+            f"https://graph.facebook.com/v19.0/{phone_id}/messages",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=payload, timeout=10,
+        )
+    except Exception as e:
+        print(f"[Indiana] Error enviando botones: {e}")
+
+def _enviar_confirmacion(numero, datos):
+    _enviar_botones(numero, _resumen(datos) + "\n\n¿Todo está correcto?", [
+        ("reg_conf_si", "✅ Registrar"),
+        ("reg_conf_no", "🔄 De nuevo"),
+    ])
 
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
@@ -187,7 +224,6 @@ def _resumen(datos):
             for p in catalogo:
                 txt += f"  • {p['nombre']} — RD${p['precio']:.0f}/{p['unidad']}\n"
 
-    txt += "\n¿Todo está correcto?\n1. Sí, registrar\n2. No, empezar de nuevo"
     return txt
 
 def _crear_negocio(datos):
@@ -255,28 +291,33 @@ def manejar_registro(numero, mensaje, meta_send):
     if estado == "esperando_nombre":
         datos["nombre"] = msg
         _set(numero, "esperando_modo", datos)
-        return (
-            f"¿Qué servicio ofrece *{msg}*?\n\n"
-            "1. Pedidos a domicilio\n"
-            "2. Agendar citas\n\n"
-            "_Escribe *cancelar* para salir._"
-        )
+        _enviar_botones(numero, f"¿Qué servicio ofrece *{msg}*?\n\n_Escribe *cancelar* para salir._", [
+            ("reg_modo_pedidos", "🛍️ Pedidos"),
+            ("reg_modo_citas", "📅 Citas"),
+        ])
+        return None
 
     # MODO
     if estado == "esperando_modo":
-        if msg_low in ("1", "pedidos", "pedidos a domicilio"):
+        if msg_low in ("1", "pedidos", "pedidos a domicilio", "reg_modo_pedidos"):
             datos["modo"] = "pedidos"
             _set(numero, "esperando_numero_negocio", datos)
             return "¿Cuál es el número de WhatsApp del negocio?\n_Ejemplo: 8091234567_"
-        elif msg_low in ("2", "citas", "agendar citas"):
+        elif msg_low in ("2", "citas", "agendar citas", "reg_modo_citas"):
             datos["modo"] = "citas"
             _set(numero, "esperando_categoria", datos)
-            return "¿Qué tipo de negocio es?\n\n1. Médico / Clínica\n2. Barbería / Estética\n3. Otro"
+            _enviar_botones(numero, "¿Qué tipo de negocio es?", [
+                ("reg_cat_me", "Médico/Clínica"),
+                ("reg_cat_ba", "Barbería/Estética"),
+                ("reg_cat_gn", "Otro"),
+            ])
+            return None
         return "Escribe *1* para Pedidos o *2* para Agendar Citas."
 
     # CATEGORÍA (citas)
     if estado == "esperando_categoria":
         cat_map = {"1": "ME", "2": "BA", "3": "GN",
+                   "reg_cat_me": "ME", "reg_cat_ba": "BA", "reg_cat_gn": "GN",
                    "medico": "ME", "médico": "ME", "clinica": "ME", "clínica": "ME",
                    "barberia": "BA", "barbería": "BA", "estetica": "BA", "estética": "BA",
                    "otro": "GN"}
@@ -337,18 +378,25 @@ def manejar_registro(numero, mensaje, meta_send):
             )
         datos["servicios"] = servicios
         _set(numero, "esperando_tipo_atencion", datos)
-        return "¿Cómo se atiende a los clientes?\n\n1. Presencial\n2. Virtual (videollamada)\n3. Ambos"
+        _enviar_botones(numero, "¿Cómo se atiende a los clientes?", [
+            ("reg_at_presencial", "Presencial"),
+            ("reg_at_virtual", "Virtual"),
+            ("reg_at_ambos", "Ambos"),
+        ])
+        return None
 
     # TIPO ATENCIÓN (citas)
     if estado == "esperando_tipo_atencion":
         at_map = {"1": "Presencial", "2": "Virtual", "3": "Presencial y Virtual",
+                  "reg_at_presencial": "Presencial", "reg_at_virtual": "Virtual", "reg_at_ambos": "Presencial y Virtual",
                   "presencial": "Presencial", "virtual": "Virtual", "ambos": "Presencial y Virtual"}
         tipo_at = at_map.get(msg_low)
         if not tipo_at:
             return "Escribe *1*, *2* o *3*."
         datos["tipo_atencion"] = tipo_at
         _set(numero, "confirmando", datos)
-        return _resumen(datos)
+        _enviar_confirmacion(numero, datos)
+        return None
 
     # CATÁLOGO (pedidos)
     if estado == "esperando_catalogo":
@@ -360,22 +408,27 @@ def manejar_registro(numero, mensaje, meta_send):
             )
         datos["catalogo"] = catalogo
         _set(numero, "esperando_comprobante", datos)
-        return "¿Requieren comprobante de pago (foto de transferencia)?\n\n1. Sí\n2. No"
+        _enviar_botones(numero, "¿Requieren comprobante de pago (foto de transferencia)?", [
+            ("reg_comp_si", "Sí"),
+            ("reg_comp_no", "No"),
+        ])
+        return None
 
     # COMPROBANTE (pedidos)
     if estado == "esperando_comprobante":
-        if msg_low in ("1", "si", "sí"):
+        if msg_low in ("1", "si", "sí", "reg_comp_si"):
             datos["requiere_comprobante"] = True
-        elif msg_low in ("2", "no"):
+        elif msg_low in ("2", "no", "reg_comp_no"):
             datos["requiere_comprobante"] = False
         else:
             return "Escribe *1* para Sí o *2* para No."
         _set(numero, "confirmando", datos)
-        return _resumen(datos)
+        _enviar_confirmacion(numero, datos)
+        return None
 
     # CONFIRMACIÓN
     if estado == "confirmando":
-        if msg_low in ("1", "si", "sí", "correcto"):
+        if msg_low in ("1", "si", "sí", "correcto", "reg_conf_si"):
             try:
                 codigo, pin, numero_fmt = _crear_negocio(datos)
                 _del(numero)
@@ -412,7 +465,7 @@ def manejar_registro(numero, mensaje, meta_send):
                 print(f"[Indiana] Error creando negocio: {e}")
                 return "Hubo un error al registrar el negocio. Nuestro equipo te contactará pronto."
 
-        elif msg_low in ("2", "no", "empezar de nuevo"):
+        elif msg_low in ("2", "no", "empezar de nuevo", "reg_conf_no"):
             _del(numero)
             return "Entendido. Escribe *4* cuando quieras intentarlo de nuevo."
 
